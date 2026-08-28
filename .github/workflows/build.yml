@@ -16,7 +16,8 @@ permissions:
 
 env:
   NODE_VERSION: '22'
-  PNPM_VERSION: '9'
+  # 与本地一致（pnpm 11），保证 lockfile 与 pnpm-workspace.yaml(allowBuilds) 行为相同
+  PNPM_VERSION: '11'
 
 jobs:
   build-windows:
@@ -49,7 +50,30 @@ jobs:
         run: pnpm run build
 
       - name: Package Windows installer (NSIS)
-        run: pnpm run electron:build:win
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Write-Host "=== electron-builder version ==="
+          pnpm exec electron-builder --version
+          Write-Host "=== running: electron-builder --win --x64 ==="
+          $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
+          pnpm exec electron-builder --win --x64
+          $code = $LASTEXITCODE
+          Write-Host "=== electron-builder exit code: $code ==="
+          Write-Host "=== release/ contents (recursive) ==="
+          if (Test-Path release) {
+            Get-ChildItem release -Recurse | Select-Object FullName, Length | Format-Table -AutoSize
+          } else {
+            Write-Host "release/ does not exist!"
+          }
+          if ($code -ne 0) { Write-Host "PACKAGING FAILED (exit $code)"; exit $code }
+
+      - name: Verify installer produced
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path release -File -Filter *.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) { throw "No .exe installer found in release/. Packaging did not produce an installer." }
+          Write-Host "Installer: $($exe.FullName) ($([math]::Round($exe.Length/1MB,1)) MB)"
 
       - name: SHA-256 checksums + build metadata
         shell: pwsh
@@ -71,7 +95,6 @@ jobs:
           Get-Content release/SHA256SUMS.txt
 
       - name: Upload build artifacts
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ppims-windows-x64
