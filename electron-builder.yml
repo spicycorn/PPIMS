@@ -1,0 +1,74 @@
+# electron-builder 配置（设计文档 1.5：打包分发走 CI，Windows 为主）
+# 关键：所有运行时依赖已在构建期打包（主进程 esbuild、渲染层 Vite），
+# 产物不依赖 node_modules，体积小、跨机器可用。
+appId: com.spicycorn.ppims
+productName: PPIMS
+copyright: Copyright © 2026 spicycorn
+
+directories:
+  output: release
+  buildResources: buildResources
+
+# 只打包真正需要的产物（package.json + 渲染层 dist + 主进程 dist-electron），
+# 不携带 node_modules（生产依赖为空，全部已 bundle）。
+files:
+  - package.json
+  - dist/**
+  - dist-electron/**
+  - "!node_modules/**"
+  - "!src/**"
+  - "!electron/**"
+  - "!scripts/**"
+  - "!shared/**"
+  - "!.github/**"
+  - "!*.md"
+  - "!.npmrc"
+  - "!release/**"
+
+asar: true
+compression: normal
+
+# Windows 安装包（NSIS）
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+  # 代码签名占位：当前无证书则跳过签名（electron-builder 自动跳过）；
+  # 将来拿到证书后，取消下面注释并配置即可启用签名。
+  # certificateFile: buildResources/cert.pfx
+  # certificatePassword: ${env.WIN_CSC_KEY_PASSWORD}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: PPIMS
+  deleteAppDataOnUninstall: false
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+# macOS / Linux 可选（按需启用 matrix）
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  category: public.app-category.productivity
+  identity: null
+
+linux:
+  target:
+    - AppImage
+  category: Office
+  maintainer: spicycorn
+
+# 发布：自动上传到 GitHub Releases（由 CI 触发）
+publish:
+  provider: github
+  owner: spicycorn
+  repo: PPIMS
+  private: false

@@ -1,0 +1,97 @@
+# PPIMS 打包与发布工作流（设计文档 §1.5：打包只能由 GitHub Actions 触发）
+# 流程：安装依赖 → 类型检查 → 单元测试 → 构建(渲染+主进程) → electron-builder 打包
+#      → SHA-256 校验和 → 上传 artifacts → 打 tag(vX.Y.Z) 时创建/追加 GitHub Release
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: '22'
+  PNPM_VERSION: '9'
+
+jobs:
+  build-windows:
+    name: Build Windows installer (x64)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm run typecheck
+
+      - name: Unit tests
+        run: pnpm run test
+
+      - name: Build (renderer + main)
+        run: pnpm run build
+
+      - name: Package Windows installer (NSIS)
+        run: pnpm run electron:build:win
+
+      - name: SHA-256 checksums + build metadata
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Get-ChildItem -Path release -File -Filter *.exe | ForEach-Object {
+            $hash = (Get-FileHash -Algorithm SHA256 $_.FullName).Hash
+            Add-Content -Path "release/SHA256SUMS.txt" -Value "$hash  $($_.Name)"
+          }
+          $meta = @{
+            product = "PPIMS"
+            version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+            os = "windows"
+            arch = "x64"
+            builtAt = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss zzz")
+            runner = $env:RUNNER_OS
+          } | ConvertTo-Json
+          Set-Content -Path "release/BUILD_METADATA.json" -Value $meta -Encoding UTF8
+          Get-Content release/SHA256SUMS.txt
+
+      - name: Upload build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ppims-windows-x64
+          path: |
+            release/*.exe
+            release/SHA256SUMS.txt
+            release/BUILD_METADATA.json
+          if-no-files-found: error
+
+      - name: Create / append GitHub Release (tag only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "PPIMS ${{ github.ref_name }}"
+          generate_release_notes: true
+          files: |
+            release/*.exe
+            release/SHA256SUMS.txt
+            release/BUILD_METADATA.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

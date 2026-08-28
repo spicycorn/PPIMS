@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- 安全模型：Electron 主进程已开启 contextIsolation、关闭 nodeIntegration，
+         渲染层只通过 preload 暴露的 window.api 访问本地能力（本地离线单用户工具）。 -->
+    <title>PPIMS · 个人项目信息管理系统</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

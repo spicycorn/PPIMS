@@ -1,0 +1,5 @@
+# pnpm 11 配置：放行需要运行 postinstall 构建脚本的依赖（pnpm 默认拦截，白名单放行）
+allowBuilds:
+  electron: true
+  esbuild: true
+  vue-demi: true
