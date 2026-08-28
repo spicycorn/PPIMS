@@ -55,9 +55,11 @@ jobs:
           $ErrorActionPreference = 'Stop'
           Write-Host "=== electron-builder version ==="
           pnpm exec electron-builder --version
-          Write-Host "=== running: electron-builder --win --x64 ==="
+          Write-Host "=== running: electron-builder --win --x64 --publish never ==="
+          # --publish never：禁用 electron-builder 自带发布（它需要 PAT/GH_TOKEN）。
+          # 上传 artifacts 与创建 Release 由下方独立步骤用内置 GITHUB_TOKEN 完成，无需 PAT。
           $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
-          pnpm exec electron-builder --win --x64
+          pnpm exec electron-builder --win --x64 --publish never
           $code = $LASTEXITCODE
           Write-Host "=== electron-builder exit code: $code ==="
           Write-Host "=== release/ contents (recursive) ==="
