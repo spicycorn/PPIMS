@@ -28,27 +28,29 @@ files:
 asar: true
 compression: normal
 
-# Windows 安装包（NSIS）
+# Windows 便携版单文件 exe（portable）：自解压到临时目录并直接运行，
+# 无需安装、无卸载残留，双击即用，最适合"下载即用"的个人工具。
 win:
   target:
-    - target: nsis
+    - target: portable
       arch:
         - x64
-  artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+  artifactName: ${productName}-${version}-win-${arch}.${ext}
   # 代码签名占位：当前无证书则跳过签名（electron-builder 自动跳过）；
   # 将来拿到证书后，取消下面注释并配置即可启用签名。
   # certificateFile: buildResources/cert.pfx
   # certificatePassword: ${env.WIN_CSC_KEY_PASSWORD}
 
-nsis:
-  oneClick: false
-  perMachine: false
-  allowToChangeInstallationDirectory: true
-  createDesktopShortcut: true
-  createStartMenuShortcut: true
-  shortcutName: PPIMS
-  deleteAppDataOnUninstall: false
-  artifactName: ${productName}-Setup-${version}.${ext}
+# 备用：如需改回 NSIS 安装向导，把上面 win.target 换成 `nsis` 并启用此块
+# nsis:
+#   oneClick: false
+#   perMachine: false
+#   allowToChangeInstallationDirectory: true
+#   createDesktopShortcut: true
+#   createStartMenuShortcut: true
+#   shortcutName: PPIMS
+#   deleteAppDataOnUninstall: false
+#   artifactName: ${productName}-Setup-${version}.${ext}
 
 # macOS / Linux 可选（按需启用 matrix）
 mac:

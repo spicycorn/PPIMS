@@ -21,7 +21,7 @@ env:
 
 jobs:
   build-windows:
-    name: Build Windows installer (x64)
+    name: Build Windows portable exe (x64)
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -49,7 +49,7 @@ jobs:
       - name: Build (renderer + main)
         run: pnpm run build
 
-      - name: Package Windows installer (NSIS)
+      - name: Package Windows portable exe
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -70,12 +70,12 @@ jobs:
           }
           if ($code -ne 0) { Write-Host "PACKAGING FAILED (exit $code)"; exit $code }
 
-      - name: Verify installer produced
+      - name: Verify portable exe produced
         shell: pwsh
         run: |
           $exe = Get-ChildItem -Path release -File -Filter *.exe -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $exe) { throw "No .exe installer found in release/. Packaging did not produce an installer." }
-          Write-Host "Installer: $($exe.FullName) ($([math]::Round($exe.Length/1MB,1)) MB)"
+          if (-not $exe) { throw "No portable .exe found in release/. Packaging did not produce an exe." }
+          Write-Host "Portable exe: $($exe.FullName) ($([math]::Round($exe.Length/1MB,1)) MB)"
 
       - name: SHA-256 checksums + build metadata
         shell: pwsh
