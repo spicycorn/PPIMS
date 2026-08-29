@@ -179,6 +179,79 @@ export interface Project {
   updatedAt: string;
 }
 
+/* ============================================================
+ * 项目架构模板（全局蓝图）—— 与槽位模板文件 Template 区分：
+ * - Template         = 槽位的模板"文件"（.docx/.xlsx 骨架，挂在槽位上）
+ * - ProjectTemplate  = 可复用的"项目架构"蓝图（阶段+槽位+类型+各槽位模板文件）
+ * 存于 Electron app.getPath('userData')/templates/<id>/：
+ *   template.json     ← ProjectTemplate 结构
+ *   templates/        ← 各槽位的模板文件（.docx/.xlsx）
+ * 应用时把结构 + 模板文件副本生成进新项目，免去逐一手填槽位。
+ * ============================================================ */
+
+/** 项目架构模板中的槽位（蓝图槽位：属性 + 模板文件引用） */
+export interface ProjectTemplateSlot {
+  id: string;
+  name: string;
+  format: FileFormat;
+  necessity: Necessity;
+  reviewRequired: boolean;
+  /** 模板文件相对模板目录 templates/ 的 POSIX 路径；空=该槽位无模板文件 */
+  templateFile?: string;
+  /** 模板文件显示名（含扩展名） */
+  templateFileName?: string;
+  order: number;
+}
+
+/** 项目架构模板中的阶段 */
+export interface ProjectTemplateStage {
+  id: string;
+  name: string;
+  description?: string;
+  slots: ProjectTemplateSlot[];
+  order: number;
+}
+
+/** 项目架构模板（全局蓝图，一键生成新项目结构） */
+export interface ProjectTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  stages: ProjectTemplateStage[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/* ---------- 模板"输入"类型（新建/编辑时渲染层提交的结构，主进程据此落盘） ---------- */
+
+/** 输入：蓝图槽位（templateFileSrc 是要拷进模板的源文件绝对路径） */
+export interface TplSlotInput {
+  name: string;
+  format: FileFormat;
+  necessity: Necessity;
+  reviewRequired: boolean;
+  /** 要拷进模板的源文件绝对路径（新挂/更换时填）；空 = 不带新文件 */
+  templateFileSrc?: string;
+  /** 模板文件建议名（含扩展名），默认取源文件名 */
+  templateFileName?: string;
+  /** 编辑时保留已存在的模板文件（templates/ 下的相对路径）；与 templateFileSrc 互斥 */
+  keepTemplateFile?: string;
+}
+
+/** 输入：蓝图阶段 */
+export interface TplStageInput {
+  name: string;
+  description?: string;
+  slots: TplSlotInput[];
+}
+
+/** 输入：新建/编辑模板的完整结构 */
+export interface TplCreateInput {
+  name: string;
+  description?: string;
+  stages: TplStageInput[];
+}
+
 /** 当前 schema 版本 */
 export const SCHEMA_VERSION = 1;
 

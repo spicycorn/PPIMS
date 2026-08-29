@@ -24,6 +24,7 @@
           </div>
         </div>
         <div style="flex: 1"></div>
+        <el-button :icon="Collection" @click="tplOpen = true">模板库</el-button>
         <el-button :icon="Download" @click="importOpen = true">导入文件库</el-button>
         <el-button :icon="Search" @click="searchOpen = true">检索</el-button>
         <el-button :icon="Refresh" :loading="saving" @click="save">保存</el-button>
@@ -76,13 +77,18 @@
     <el-dialog v-model="searchOpen" title="检索 · 条件筛选" width="820px" top="8vh">
       <SearchPanel @open-slot="onSearchOpenSlot" />
     </el-dialog>
+
+    <!-- 模板库（全局；带当前项目，可"从当前项目另存"） -->
+    <el-dialog v-model="tplOpen" title="模板库" width="900px" top="6vh" destroy-on-close>
+      <TemplateManager :current-folder="app.currentProjectFolder" />
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
-import { Refresh, FolderOpened, Back, Briefcase, Download, Search } from '@element-plus/icons-vue';
+import { Refresh, FolderOpened, Back, Briefcase, Download, Search, Collection } from '@element-plus/icons-vue';
 import { storeToRefs } from 'pinia';
 import { useAppStore } from '../stores/app';
 import { useProjectStore } from '../stores/project';
@@ -90,6 +96,7 @@ import StagePanel from './StagePanel.vue';
 import SlotWorkspace from './SlotWorkspace.vue';
 import ImportPanel from './ImportPanel.vue';
 import SearchPanel from './SearchPanel.vue';
+import TemplateManager from './TemplateManager.vue';
 import { QUALIFIED_STATUSES } from '../../shared/types';
 
 const app = useAppStore();
@@ -100,6 +107,7 @@ const selectedStageId = ref('');
 const selectedSlotId = ref('');
 const importOpen = ref(false);
 const searchOpen = ref(false);
+const tplOpen = ref(false);
 
 const selectedStage = computed(() => projectStore.stages.find((s) => s.id === selectedStageId.value) ?? null);
 const selectedSlot = computed(() =>

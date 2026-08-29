@@ -3,7 +3,7 @@
  * contextIsolation 开启、nodeIntegration 关闭 —— 渲染层不直接接触 Node，安全且可控。
  */
 import { contextBridge, ipcRenderer } from 'electron';
-import type { Project } from '../shared/types';
+import type { Project, ProjectTemplate, TplCreateInput } from '../shared/types';
 
 export interface OpenDialogOpts {
   title?: string;
@@ -42,6 +42,16 @@ export interface Api {
   // 导入
   importScan(libraryDir: string, stages: Array<{ id: string; name: string }>): Promise<any>;
   importCopy(params: any): Promise<{ copied: Array<{ from: string; to: string }> }>;
+
+  // 项目架构模板（全局蓝图）
+  listTemplates(): Promise<ProjectTemplate[]>;
+  getTemplate(id: string): Promise<ProjectTemplate>;
+  createTemplate(input: TplCreateInput): Promise<ProjectTemplate>;
+  updateTemplate(id: string, input: TplCreateInput): Promise<ProjectTemplate>;
+  duplicateTemplate(id: string, name?: string): Promise<ProjectTemplate>;
+  deleteTemplate(id: string): Promise<{ deleted: string }>;
+  saveTemplateFromProject(projectFolder: string, name?: string, description?: string): Promise<ProjectTemplate>;
+  applyTemplate(rootDir: string, project: Project, templateId: string): Promise<{ folder: string; folderName: string; rootPath: string; appliedTemplateId: string }>;
 }
 
 const api: Api = {
@@ -73,6 +83,18 @@ const api: Api = {
 
   importScan: (libraryDir, stages) => ipcRenderer.invoke('import:scan', { libraryDir, stages }),
   importCopy: (params) => ipcRenderer.invoke('import:copy', params),
+
+  // 项目架构模板（全局蓝图）
+  listTemplates: () => ipcRenderer.invoke('template:list'),
+  getTemplate: (id) => ipcRenderer.invoke('template:get', id),
+  createTemplate: (input) => ipcRenderer.invoke('template:create', input),
+  updateTemplate: (id, input) => ipcRenderer.invoke('template:update', { id, input }),
+  duplicateTemplate: (id, name) => ipcRenderer.invoke('template:duplicate', { id, name }),
+  deleteTemplate: (id) => ipcRenderer.invoke('template:delete', id),
+  saveTemplateFromProject: (projectFolder, name, description) =>
+    ipcRenderer.invoke('template:saveFromProject', { projectFolder, name, description }),
+  applyTemplate: (rootDir, project, templateId) =>
+    ipcRenderer.invoke('template:apply', { rootDir, project, templateId }),
 };
 
 contextBridge.exposeInMainWorld('api', api);

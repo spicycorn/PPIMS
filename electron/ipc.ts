@@ -10,7 +10,17 @@ import { IPC, type LibraryScanResult } from './ipc-channels';
 import { recognizeStructure, replaceInXml, writeDocx, readDocumentXml } from './services/docx-engine';
 import * as XLSX from 'xlsx';
 import { recognizeWorkbook, writeWorkbook } from './services/xlsx-engine';
-import type { Project } from '../shared/types';
+import {
+  listTemplates,
+  getTemplate,
+  materializeTemplate,
+  saveTemplateFromProject,
+  updateTemplate,
+  duplicateTemplate,
+  deleteTemplate,
+  applyTemplateToNewProject,
+} from './services/template-service';
+import type { Project, TplCreateInput } from '../shared/types';
 import { sanitize, stageFolderName, TEMPLATES_DIR, DAILY_DIR, BACKUP_DIR } from '../shared/paths';
 
 /* ---------------- 工具 ---------------- */
@@ -302,6 +312,40 @@ export function registerIpc(): void {
       return { copied };
     },
   );
+
+  /* ---------------- 项目架构模板（全局蓝图） ---------------- */
+
+  ipcMain.handle(IPC.TPL_LIST, async () => {
+    return listTemplates();
+  });
+
+  ipcMain.handle(IPC.TPL_GET, async (_e, id: string) => {
+    return getTemplate(id);
+  });
+
+  ipcMain.handle(IPC.TPL_CREATE, async (_e, input: TplCreateInput) => {
+    return materializeTemplate(input);
+  });
+
+  ipcMain.handle(IPC.TPL_UPDATE, async (_e, { id, input }: { id: string; input: TplCreateInput }) => {
+    return updateTemplate(id, input);
+  });
+
+  ipcMain.handle(IPC.TPL_DUPLICATE, async (_e, { id, name }: { id: string; name?: string }) => {
+    return duplicateTemplate(id, name);
+  });
+
+  ipcMain.handle(IPC.TPL_DELETE, async (_e, id: string) => {
+    return deleteTemplate(id);
+  });
+
+  ipcMain.handle(IPC.TPL_SAVE_FROM_PROJECT, async (_e, { projectFolder, name, description }: { projectFolder: string; name?: string; description?: string }) => {
+    return saveTemplateFromProject(projectFolder, name, description);
+  });
+
+  ipcMain.handle(IPC.TPL_APPLY, async (_e, { rootDir, project, templateId }: { rootDir: string; project: Project; templateId: string }) => {
+    return applyTemplateToNewProject({ rootDir, project, templateId });
+  });
 }
 
 async function exists(p: string): Promise<boolean> {

@@ -1,7 +1,7 @@
 /**
  * 渲染层可见的 window.api 类型声明（与 electron/preload.ts 的 Api 对齐，但不引入 electron 类型）。
  */
-import type { Project } from '../../shared/types';
+import type { Project, ProjectTemplate, TplCreateInput } from '../../shared/types';
 
 export interface OpenDialogOpts {
   title?: string;
@@ -55,6 +55,16 @@ export interface Api {
 
   importScan(libraryDir: string, stages: Array<{ id: string; name: string }>): Promise<any>;
   importCopy(params: any): Promise<{ copied: Array<{ from: string; to: string }> }>;
+
+  // 项目架构模板（全局蓝图）
+  listTemplates(): Promise<ProjectTemplate[]>;
+  getTemplate(id: string): Promise<ProjectTemplate>;
+  createTemplate(input: TplCreateInput): Promise<ProjectTemplate>;
+  updateTemplate(id: string, input: TplCreateInput): Promise<ProjectTemplate>;
+  duplicateTemplate(id: string, name?: string): Promise<ProjectTemplate>;
+  deleteTemplate(id: string): Promise<{ deleted: string }>;
+  saveTemplateFromProject(projectFolder: string, name?: string, description?: string): Promise<ProjectTemplate>;
+  applyTemplate(rootDir: string, project: Project, templateId: string): Promise<{ folder: string; folderName: string; rootPath: string; appliedTemplateId: string }>;
 }
 
 declare global {

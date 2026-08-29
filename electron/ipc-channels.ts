@@ -34,6 +34,16 @@ export const IPC = {
   // 导入
   IMPORT_SCAN: 'import:scan',
   IMPORT_COPY: 'import:copy',
+
+  // 项目架构模板（全局蓝图）
+  TPL_LIST: 'template:list',
+  TPL_GET: 'template:get',
+  TPL_CREATE: 'template:create',
+  TPL_UPDATE: 'template:update',
+  TPL_DUPLICATE: 'template:duplicate',
+  TPL_DELETE: 'template:delete',
+  TPL_SAVE_FROM_PROJECT: 'template:saveFromProject',
+  TPL_APPLY: 'template:apply',
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];
