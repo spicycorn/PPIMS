@@ -96,14 +96,13 @@ jobs:
           Set-Content -Path "release/BUILD_METADATA.json" -Value $meta -Encoding UTF8
           Get-Content release/SHA256SUMS.txt
 
-      - name: Upload build artifacts
+      # 产物只放 exe 一个文件：从 Actions 下载 zip 解压后即为单个便携 exe，无杂项。
+      # SHA-256 校验和只挂到 GitHub Release 页（与 exe 分开列示），不塞进主产物 zip。
+      - name: Upload build artifacts (exe only)
         uses: actions/upload-artifact@v4
         with:
           name: ppims-windows-x64
-          path: |
-            release/*.exe
-            release/SHA256SUMS.txt
-            release/BUILD_METADATA.json
+          path: release/*.exe
           if-no-files-found: error
 
       - name: Create / append GitHub Release (tag only)
