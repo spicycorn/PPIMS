@@ -71,7 +71,7 @@
               <el-select v-model="selectedTemplateId" clearable placeholder="选一个模板，一键生成阶段/槽位/模板文件" style="width: 100%">
                 <el-option v-for="t in templateList" :key="t.id" :label="t.name" :value="t.id">
                   <span>{{ t.name }}</span>
-                  <span class="muted" style="float: right; font-size: 12px">{{ t.stages.length }} 阶段 · {{ slotCount(t) }} 槽位</span>
+                  <span class="muted" style="float: right; font-size: 12px">{{ t.stages.length }} 阶段 · {{ countTemplateSlots(t) }} 槽位</span>
                 </el-option>
               </el-select>
             </el-form-item>
@@ -112,6 +112,7 @@ import { useAppStore } from '../stores/app';
 import { useProjectStore, createDefaultProject } from '../stores/project';
 import TemplateManager from './TemplateManager.vue';
 import type { ProjectInfo, ProjectTemplate } from '../../shared/types';
+import { countTemplateSlots } from '../../shared/template-mapping';
 
 const app = useAppStore();
 const projectStore = useProjectStore();
@@ -128,10 +129,6 @@ const tplOpen = ref(false);
 const selectedTemplateName = computed(
   () => templateList.value.find((t) => t.id === selectedTemplateId.value)?.name ?? '',
 );
-
-function slotCount(t: ProjectTemplate): number {
-  return t.stages.reduce((n, st) => n + st.slots.length, 0);
-}
 
 async function loadTemplates() {
   try {

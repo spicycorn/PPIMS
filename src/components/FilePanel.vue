@@ -31,7 +31,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="updatedAt" label="更新时间" width="150">
-          <template #default="{ row }">{{ fmt(row.updatedAt) }}</template>
+          <template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
@@ -56,6 +56,7 @@ import { useAppStore } from '../stores/app';
 import { useProjectStore } from '../stores/project';
 import { STATUS_LABEL, type FileInstance, type Slot, type Stage } from '../../shared/types';
 import { slotDir } from '../../shared/paths';
+import { formatDateTime } from '../../shared/util';
 
 const props = defineProps<{ stage: Stage; slot: Slot }>();
 const app = useAppStore();
@@ -64,12 +65,6 @@ const store = useProjectStore();
 const latestVersion = computed(() =>
   props.slot.files.reduce((m, f) => Math.max(m, f.version), 0),
 );
-
-function fmt(iso: string): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
 
 async function upload() {
   const stageOrder = store.stages.findIndex((s) => s.id === props.stage.id);

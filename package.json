@@ -1,6 +1,6 @@
 {
   "name": "ppims",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "个人项目信息管理系统 · 本地项目资料管理工具（勘测业务）",
   "author": "spicycorn",
   "private": true,
@@ -9,14 +9,15 @@
   "scripts": {
     "dev": "vite",
     "dev:electron": "electron .",
+    "icons": "node scripts/gen-icon.mjs && node scripts/derive-icons.mjs",
     "build:renderer": "vite build",
     "build:electron": "node scripts/build-electron.mjs",
-    "build": "npm run typecheck && npm run build:renderer && npm run build:electron",
+    "build": "vue-tsc --noEmit && vite build && node scripts/build-electron.mjs",
     "typecheck": "vue-tsc --noEmit",
     "preview": "vite preview",
     "electron:build": "electron-builder",
-    "electron:build:win": "electron-builder --win",
-    "pack:win": "npm run build && electron-builder --win",
+    "electron:build:win": "node scripts/gen-icon.mjs && node scripts/derive-icons.mjs && electron-builder --win",
+    "pack:win": "node scripts/gen-icon.mjs && node scripts/derive-icons.mjs && vue-tsc --noEmit && vite build && node scripts/build-electron.mjs && electron-builder --win",
     "test": "vitest run",
     "test:watch": "vitest"
   },

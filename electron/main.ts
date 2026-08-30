@@ -18,6 +18,8 @@ let mainWindow: BrowserWindow | null = null;
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     title: 'PPIMS · 个人项目信息管理系统',
+    // 应用图标：可爱小人整理文件夹（public/ 下；Windows 窗口标题栏/任务栏生效）
+    icon: path.join(app.getAppPath(), 'public', 'icon.png'),
     width: 1280,
     height: 820,
     minWidth: 960,

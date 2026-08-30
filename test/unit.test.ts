@@ -1,13 +1,15 @@
 /**
- * Word 原位替换引擎 —— 保真单元测试（验收 #4 的硬证据）。
+ * PPIMS 单元测试（合并自 docx-engine.test.ts 与 template-mapping.test.ts）。
  *
- * 断言：
- *  1) 结构识别能找出标题 / 正文 / 表格；
- *  2) 原位替换后，docx zip 中"只有 word/document.xml 这一项改变"，
- *     其余 entry（styles.xml / rels / [Content_Types].xml 等）字节级不变；
- *  3) document.xml 内部"只有目标 <w:t> 的文本被替换"，其余标签 / 属性 / 其它 <w:t> 全部不变；
- *  4) 中文（CJK）写入正确、无乱码；
- *  5) 未命中的替换如实上报 missed，不静默失败。
+ * 一、Word 原位替换引擎 —— 保真测试（验收 #4 的硬证据）：
+ *   1) 结构识别能找出标题 / 正文 / 表格；
+ *   2) 原位替换后，docx zip 中"只有 word/document.xml 这一项改变"，其余 entry 字节级不变；
+ *   3) document.xml 内部"只有目标 <w:t> 的文本被替换"，其余标签 / 属性 / 其它 <w:t> 全部不变；
+ *   4) 中文（CJK）写入正确、无乱码；
+ *   5) 未命中的替换如实上报 missed，不静默失败。
+ *
+ * 二、项目架构模板 —— 纯映射逻辑（不依赖 electron/文件系统）：
+ *   从现有项目捕获 阶段+槽位+各槽位已挂模板文件 的"另存为模板"核心映射。
  */
 import { describe, it, expect } from 'vitest';
 import JSZip from 'jszip';
@@ -17,6 +19,13 @@ import {
   writeDocx,
   readDocumentXml,
 } from '../electron/services/docx-engine';
+import { projectToTemplateStages } from '../shared/template-mapping';
+import type { Project, Slot, Stage, Template } from '../shared/types';
+import { SCHEMA_VERSION } from '../shared/types';
+
+/* ================================================================
+ * 一、Word 原位替换引擎 · 保真
+ * ================================================================ */
 
 /** 构造一个最小但合法的 docx（含标题 / 正文 / 表格 / 中文字符） */
 async function buildSampleDocx(): Promise<Buffer> {
@@ -119,11 +128,9 @@ describe('docx 原位替换引擎 · 保真', () => {
     expect(headings.length).toBeGreaterThanOrEqual(1);
     expect(headings[0].text).toContain('总则');
 
-    // 正文中文识别正确
     expect(structure.fullText).toContain('某某河道治理工程勘察');
     expect(structure.fullText).toContain('60-F14742S');
 
-    // 表格识别
     expect(structure.tables.length).toBeGreaterThanOrEqual(1);
     expect(structure.tables[0].headers).toContain('项目');
     expect(structure.tables[0].rows).toBeGreaterThanOrEqual(2);
@@ -134,7 +141,6 @@ describe('docx 原位替换引擎 · 保真', () => {
     const beforeHashes = await entryHashes(before);
     const beforeXml = await readDocumentXml(before);
 
-    // 只改一个字段（中文）
     const { xml: newXml, applied, missed } = replaceInXml(beforeXml, [
       { oldText: '某某河道治理工程勘察', newText: '新项目名称：长江支流整治' },
     ]);
@@ -145,23 +151,18 @@ describe('docx 原位替换引擎 · 保真', () => {
     const afterHashes = await entryHashes(after);
     const afterXml = await readDocumentXml(after);
 
-    // 1) 其它 entry 字节级不变
     for (const name of Object.keys(beforeHashes)) {
       if (name === 'word/document.xml') continue;
       expect(afterHashes[name], `entry ${name} 必须字节级一致`).toBe(beforeHashes[name]);
     }
 
-    // 2) document.xml 只有目标文本被替换，其它 <w:t> 不变
     expect(afterXml).toContain('新项目名称：长江支流整治');
     expect(afterXml).not.toContain('某某河道治理工程勘察');
-    // 其它文本保持原样
     expect(afterXml).toContain('第一章 总则');
     expect(afterXml).toContain('项目编号：60-F14742S');
     expect(afterXml).toContain('钻孔');
     expect(afterXml).toContain('12');
 
-    // 3) 除被替换的文本外，XML 结构（标签/属性）不变：
-    //    去掉被替换的新文本与旧文本差异后，应一致
     const normBefore = beforeXml.replace('某某河道治理工程勘察', 'XX');
     const normAfter = afterXml.replace('新项目名称：长江支流整治', 'XX');
     expect(normAfter).toBe(normBefore);
@@ -170,7 +171,6 @@ describe('docx 原位替换引擎 · 保真', () => {
   it('跨 run 拆分的文本也能原位命中', async () => {
     const docx = await buildSampleDocx();
     const xml = await readDocumentXml(docx);
-    // "项目名称：" 与 "某某河道治理工程勘察" 分在两个 <w:t>，拼接起来命中
     const { applied, missed } = replaceInXml(xml, [
       { oldText: '项目名称：某某河道治理工程勘察', newText: '项目名称：替换成功' },
     ]);
@@ -186,5 +186,121 @@ describe('docx 原位替换引擎 · 保真', () => {
     ]);
     expect(applied).toBe(0);
     expect(missed).toEqual(['这段文字根本不存在']);
+  });
+});
+
+/* ================================================================
+ * 二、projectToTemplateStages（项目→模板结构映射）
+ * ================================================================ */
+
+function makeProject(): Project {
+  const tmplA: Template = {
+    id: 'tmpl_a',
+    name: '勘察大纲',
+    format: 'docx',
+    path: 'templates/勘察大纲.docx',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  };
+  const tmplB: Template = {
+    id: 'tmpl_b',
+    name: '工作量表',
+    format: 'xlsx',
+    path: 'templates/工作量表.xlsx',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  };
+
+  const slotA: Slot = {
+    id: 'slot_a',
+    name: '勘察大纲',
+    format: 'docx',
+    necessity: 'required',
+    reviewRequired: true,
+    templateId: 'tmpl_a',
+    files: [],
+    order: 0,
+  };
+  const slotB: Slot = {
+    id: 'slot_b',
+    name: '工作量确认表',
+    format: 'xlsx',
+    necessity: 'should',
+    reviewRequired: false,
+    templateId: 'tmpl_b',
+    files: [],
+    order: 1,
+  };
+  const slotC: Slot = {
+    id: 'slot_c',
+    name: '试验记录',
+    format: 'docx',
+    necessity: 'optional',
+    reviewRequired: true,
+    files: [],
+    order: 2,
+  };
+
+  const stage: Stage = {
+    id: 'stage_1',
+    info: { name: '项目策划', description: '资料最密集', startTime: '' },
+    slots: [slotA, slotB, slotC],
+    weight: 1,
+    order: 0,
+  };
+
+  return {
+    id: 'proj_1',
+    info: { name: 'XX 河道勘察', code: '60-F1', establishDate: '2026-01-01' },
+    rootPath: '',
+    stages: [stage],
+    templates: [tmplA, tmplB],
+    schemaVersion: SCHEMA_VERSION,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  };
+}
+
+describe('projectToTemplateStages（项目→模板结构映射）', () => {
+  it('正确捕获阶段数量、名称、说明', () => {
+    const out = projectToTemplateStages(makeProject());
+    expect(out).toHaveLength(1);
+    expect(out[0].name).toBe('项目策划');
+    expect(out[0].description).toBe('资料最密集');
+  });
+
+  it('正确捕获槽位数量与 名称/格式/必要性/需审查', () => {
+    const out = projectToTemplateStages(makeProject());
+    const slots = out[0].slots;
+    expect(slots).toHaveLength(3);
+    expect(slots[0]).toMatchObject({
+      name: '勘察大纲',
+      format: 'docx',
+      necessity: 'required',
+      reviewRequired: true,
+    });
+    expect(slots[1]).toMatchObject({
+      name: '工作量确认表',
+      format: 'xlsx',
+      necessity: 'should',
+      reviewRequired: false,
+    });
+    expect(slots[2]).toMatchObject({
+      name: '试验记录',
+      format: 'docx',
+      necessity: 'optional',
+      reviewRequired: true,
+    });
+  });
+
+  it('已挂模板的槽位带上 templateFileName + templateFileSrc；未挂的不带', () => {
+    const out = projectToTemplateStages(makeProject());
+    const [a, b, c] = out[0].slots;
+    expect(a.templateFileName).toBe('勘察大纲.docx');
+    expect(a.templateFileSrc).toBe('templates/勘察大纲.docx');
+    expect(b.templateFileName).toBe('工作量表.xlsx');
+    expect(b.templateFileSrc).toBe('templates/工作量表.xlsx');
+    expect(c.templateFileName).toBeUndefined();
+    expect(c.templateFileSrc).toBeUndefined();
   });
 });

@@ -20,11 +20,11 @@
       </el-table-column>
       <el-table-column label="规模" width="120">
         <template #default="{ row }">
-          {{ row.stages.length }} 阶段 · {{ slotCount(row) }} 槽位
+          {{ row.stages.length }} 阶段 · {{ countTemplateSlots(row) }} 槽位
         </template>
       </el-table-column>
       <el-table-column label="更新" width="160">
-        <template #default="{ row }">{{ fmtTime(row.updatedAt) }}</template>
+        <template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template>
       </el-table-column>
       <el-table-column label="操作" width="220" fixed="right">
         <template #default="{ row }">
@@ -193,6 +193,8 @@ import type {
   TplStageInput,
 } from '../../shared/types';
 import { FORMAT_LABEL, NECESSITY_LABEL } from '../../shared/types';
+import { countTemplateSlots } from '../../shared/template-mapping';
+import { formatDateTime } from '../../shared/util';
 
 const props = defineProps<{
   /** 当前项目文件夹（用于"从当前项目另存"）；空 = 不在项目内 */
@@ -431,19 +433,6 @@ async function doSaveFromProject() {
   }
 }
 
-/* ---------------- 工具 ---------------- */
-
-function slotCount(tpl: ProjectTemplate): number {
-  return tpl.stages.reduce((n, st) => n + st.slots.length, 0);
-}
-
-function fmtTime(iso: string): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
-}
 
 onMounted(refresh);
 void app;

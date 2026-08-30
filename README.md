@@ -4,7 +4,33 @@
 原位编辑 Word/Excel、多版本、状态流转、进度实时重算、检索。
 
 技术栈：Electron + Vue 3 + TypeScript + Vite + Element Plus + Pinia。
-详见《个人项目信息管理系统设计文档.md》（唯一事实源）。
+详见《[PPIMS-设计文档.md](docs/PPIMS-设计文档.md)》（唯一事实源）。
+
+**应用图标**：可爱小人整理文件夹，`public/` 下由 `scripts/gen-icon.mjs`（矢量绘图 + 纯 Node 手写 PNG 编码，零依赖）生成，
+`scripts/derive-icons.mjs` 派生多尺寸 PNG 与 `icon.ico`（16/32/48/256）。
+窗口标题栏/任务栏、浏览器 favicon、Windows exe 图标均用它。重新生成：`pnpm run icons`。
+
+### 目录结构
+
+```
+PPIMS/
+├─ src/                 # 渲染层（Vue 3 + Element Plus）：App / components / stores / types
+├─ electron/            # 主进程（Node/Electron）：main / preload / ipc / services（docx·xlsx 引擎、模板服务、fs）
+├─ shared/              # 跨层共享：types / paths / template-mapping / util（不依赖 electron）
+├─ public/              # 应用图标（icon.png / icon-*.png / icon.ico）
+├─ scripts/             # 构建与图标脚本（build-electron、gen-icon、derive-icons）
+├─ test/                # 单元测试（unit.test.ts：Word 原位替换保真 + 模板映射）
+├─ docs/                # 设计文档（PPIMS-设计文档.md，唯一事实源）
+├─ .github/             # CI（Build & Release，Actions 触发打包/发布）
+├─ index.html           # Vite 入口（含 favicon）
+├─ electron-builder.yml # 打包配置（图标、便携 exe、签名占位、发布）
+├─ package.json         # 依赖与脚本
+└─ *.config / tsconfig / vitest.config   # Vite / 类型 / 测试配置
+```
+
+> 分层原则：`shared/` 是纯逻辑、无 electron 依赖，渲染层与主进程都能安全 import；
+> 引擎与 IPC 只在 `electron/`；UI 只在 `src/`。重复的 fs/助手统一收到 `electron/services/fs.ts`、
+> `shared/util.ts`、`shared/template-mapping.ts`，避免各写一份。
 
 ---
 
@@ -61,8 +87,11 @@ pnpm run typecheck
 pnpm run test
 pnpm run build
 
-# 本地运行 Electron
-pnpm run electron:dev
+# 重新生成应用图标（可爱小人整理文件夹）
+pnpm run icons
+
+# 本地运行 Electron：一个终端跑 `pnpm run dev`（起 Vite），另一个终端跑：
+pnpm run dev:electron
 ```
 
 打包/发布**只能由 GitHub Actions 触发**（设计文档 §1.5），本地 `electron-builder`

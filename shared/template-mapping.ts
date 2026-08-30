@@ -6,7 +6,7 @@
  * 用于"从现有项目另存为模板"。槽位保留 名称/格式/必要性/需审查；
  * 已挂模板的槽位带上 templateFileName（basename）+ templateFileSrc（模板相对 posix 路径）。
  */
-import type { Project, TplStageInput, TplSlotInput } from './types';
+import type { Project, ProjectTemplate, TplStageInput, TplSlotInput } from './types';
 
 /** 浏览器安全的 basename（不依赖 node:path） */
 function baseName(p: string): string {
@@ -32,4 +32,9 @@ export function projectToTemplateStages(project: Project): TplStageInput[] {
       return slotIn;
     }),
   }));
+}
+
+/** 统计一个项目架构模板里的槽位总数（ProjectList / TemplateManager 共用） */
+export function countTemplateSlots(tpl: ProjectTemplate): number {
+  return tpl.stages.reduce((n, st) => n + st.slots.length, 0);
 }

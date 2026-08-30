@@ -7,6 +7,9 @@ dist-electron/
 release/
 out/
 
+# pnpm 本地内容寻址缓存（体积大，不入库）
+.pnpm-store/
+
 # 日志与缓存
 *.log
 .vite/

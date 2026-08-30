@@ -95,11 +95,12 @@
 | 构建编排 | **GitHub Actions**（`.github/workflows/build.yml`） | push 到 `main` / 打 tag / 手动触发均触发构建 |
 | 目标平台 | **Windows 为主**（`windows-latest`），macOS/Linux 可选（matrix） | 用户主环境为 Windows；其余平台按需启用 |
 | 产物发布 | **GitHub Releases**（自动上传 artifacts + 生成 Release Notes） | 打 tag（如 `v0.1.0`）即自动发版 |
-| 版本管理 | 语义化版本（`vX.Y.Z`），版本号写入 `package.json` 与 `project.json` 配置 | 每次发版递增 |
+| 版本管理 | 语义化版本（`vX.Y.Z`），版本号写入 `package.json` | 每次发版递增（当前 `0.1.1`） |
+| 应用图标 | **可爱小人整理文件夹**（`public/icon.png` + `icon.ico`） | `scripts/gen-icon.mjs` 矢量绘图 + 纯 Node 手写 PNG 编码（零依赖）生成，`derive-icons.mjs` 派生多尺寸；窗口/favicon/exe 图标统一用它 |
 | 产物校验 | 附带**校验和（SHA-256）**与构建元数据 | 便于用户验证完整性 |
 
 **工作流约定（实现方必须遵守）：**
-1. 打包**只能**由 GitHub Actions 触发；本地 `npm run build` 仅用于开发自检，不产出分发物。
+1. 打包**只能**由 GitHub Actions 触发；本地 `pnpm run build` 仅用于开发自检，不产出分发物。
 2. 工作流需覆盖：安装依赖 → 类型检查/单元测试 → electron-builder 打包 → 上传 artifacts → 打 tag 时创建 Release。
 3. Windows 包需处理**代码签名占位**（当前无证书则跳过签名，但保留配置位）。
 4. 每个 Release 必须可在干净机器上**一键安装并启动**，否则视为打包失败。
@@ -247,6 +248,22 @@
 | 定位 | 项目级流程审批、多人协作、在线 | 个人资料管理、单机离线 |
 | 职责 | 管"流程审批" | 管"个人资料" |
 | 关系 | 互补：本系统完成编制整理后，上传企业平台走审批 | |
+
+### 2.8 源码分层与去重（实现约定）
+
+> 原则：**单一职责、跨层共享、杜绝重复**。三处易重复的逻辑统一收到共享模块，避免"渲染层一份、主进程一份"。
+
+| 层 | 位置 | 职责 | 约束 |
+|----|------|------|------|
+| 渲染层 | `src/` | Vue 3 + Element Plus UI（App / components / stores / types） | 只经 `window.api`（preload 桥）访问本地能力，不直接 import electron |
+| 主进程 | `electron/` | `main` / `preload` / `ipc` + `services`（docx·xlsx 引擎、模板服务、`fs` 助手） | 引擎与 IPC 只在此层 |
+| 共享层 | `shared/` | `types` / `paths` / `template-mapping` / `util` | **纯逻辑、零 electron 依赖**，渲染层与主进程均可安全 import；单元测试也 import 它 |
+
+**去重落点：**
+- `shared/template-mapping.ts` → `projectToTemplateStages`、`countTemplateSlots`（ProjectList 与 TemplateManager 共用，不再各写 `slotCount`）。
+- `shared/util.ts` → `formatDateTime`、`nowIso`（FilePanel 与 TemplateManager 共用，不再各写 `fmt`）。
+- `electron/services/fs.ts` → `ensureDir`、`copyFile`（ipc.ts 与 template-service.ts 共用，不再各写一份）。
+- 单元测试合并为单一 `test/unit.test.ts`（Word 原位替换保真 4 项 + 模板映射 3 项，共 7 项），不再拆两个文件。
 
 ---
 

@@ -5,6 +5,10 @@ appId: com.spicycorn.ppims
 productName: PPIMS
 copyright: Copyright © 2026 spicycorn
 
+# 应用图标：可爱小人整理文件夹（public/ 下；gen-icon.mjs 生成，derive-icons.mjs 派生多尺寸）
+# icon.png 供 mac/linux/窗口；icon.ico 供 Windows exe/安装器
+icon: public/icon.png
+
 directories:
   output: release
   buildResources: buildResources

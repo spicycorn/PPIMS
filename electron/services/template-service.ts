@@ -24,6 +24,7 @@ import type {
 } from '../../shared/types';
 import { sanitize, TEMPLATES_DIR, stageFolderName } from '../../shared/paths';
 import { projectToTemplateStages } from '../../shared/template-mapping';
+import { ensureDir, copyFile } from './fs';
 
 /* 输入类型（TplSlotInput/TplStageInput/TplCreateInput）定义在 shared/types.ts，
    渲染层 / preload / api.d.ts 均可安全引用（不引入 electron）。 */
@@ -45,14 +46,7 @@ function now(): string {
   return new Date().toISOString();
 }
 
-async function ensureDir(dir: string): Promise<void> {
-  await fs.mkdir(dir, { recursive: true });
-}
-
-async function copyFile(src: string, dest: string): Promise<void> {
-  await ensureDir(path.dirname(dest));
-  await fs.copyFile(src, dest);
-}
+// ensureDir / copyFile 统一从 ./fs 导入（与 ipc.ts 共用）
 
 async function isDir(p: string): Promise<boolean> {
   try {

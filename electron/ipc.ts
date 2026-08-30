@@ -7,6 +7,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { IPC, type LibraryScanResult } from './ipc-channels';
+import { ensureDir, copyFile } from './services/fs';
 import { recognizeStructure, replaceInXml, writeDocx, readDocumentXml } from './services/docx-engine';
 import * as XLSX from 'xlsx';
 import { recognizeWorkbook, writeWorkbook } from './services/xlsx-engine';
@@ -30,14 +31,7 @@ function relPosix(from: string, to: string): string {
   return path.relative(from, to).split(path.sep).join('/');
 }
 
-async function ensureDir(dir: string): Promise<void> {
-  await fs.mkdir(dir, { recursive: true });
-}
-
-async function copyFile(src: string, dest: string): Promise<void> {
-  await ensureDir(path.dirname(dest));
-  await fs.copyFile(src, dest);
-}
+// ensureDir / copyFile 统一从 ./services/fs 导入（与 template-service 共用）
 
 /* ---------------- 对话框 ---------------- */
 
