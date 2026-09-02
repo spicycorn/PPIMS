@@ -8,11 +8,16 @@ export const IPC = {
   OPEN_DIALOG: 'dialog:open',
   SAVE_DIALOG: 'dialog:save',
 
+  // 根配置（分类维度，设计文档 2.9）
+  ROOT_CONFIG_GET: 'root:config:get',
+  ROOT_CONFIG_SAVE: 'root:config:save',
+
   // 项目
   PROJECT_LIST: 'project:list',
   PROJECT_CREATE: 'project:create',
   PROJECT_LOAD: 'project:load',
   PROJECT_SAVE: 'project:save',
+  PROJECT_PATCH_INFO: 'project:patchInfo',
   PROJECT_DELETE: 'project:delete',
   PROJECT_OPEN_FOLDER: 'project:openFolder',
 
@@ -34,6 +39,10 @@ export const IPC = {
   // 导入
   IMPORT_SCAN: 'import:scan',
   IMPORT_COPY: 'import:copy',
+
+  // 多层级自动扫描 + 逐条导入（设计文档 2.10）
+  SCAN_PROJECTS: 'scan:projects',
+  SCAN_IMPORT: 'scan:import',
 
   // 项目架构模板（全局蓝图）
   TPL_LIST: 'template:list',

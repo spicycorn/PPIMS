@@ -20,8 +20,8 @@
           </template>
         </el-table-column>
         <el-table-column prop="name" label="名称" min-width="160" />
-        <el-table-column prop="format" label="格式" width="80">
-          <template #default="{ row }">{{ row.format }}</template>
+        <el-table-column label="格式" width="100">
+          <template #default="{ row }">{{ FORMAT_LABEL[row.format as FileFormat] }}</template>
         </el-table-column>
         <el-table-column label="状态" width="160">
           <template #default="{ row }">
@@ -54,7 +54,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { Upload, Download, Delete, Folder } from '@element-plus/icons-vue';
 import { useAppStore } from '../stores/app';
 import { useProjectStore } from '../stores/project';
-import { STATUS_LABEL, type FileInstance, type Slot, type Stage } from '../../shared/types';
+import { STATUS_LABEL, FORMAT_LABEL, type FileFormat, type FileInstance, type Slot, type Stage } from '../../shared/types';
 import { slotDir } from '../../shared/paths';
 import { formatDateTime } from '../../shared/util';
 

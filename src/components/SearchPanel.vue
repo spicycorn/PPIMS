@@ -40,7 +40,9 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="file.format" label="格式" width="70" />
+        <el-table-column label="格式" width="100">
+          <template #default="{ row }">{{ FORMAT_LABEL[row.file.format as FileFormat] }}</template>
+        </el-table-column>
       </el-table>
     </div>
   </div>
@@ -51,7 +53,7 @@ import { computed, ref } from 'vue';
 import { Search } from '@element-plus/icons-vue';
 import { storeToRefs } from 'pinia';
 import { useProjectStore } from '../stores/project';
-import { QUALIFIED_STATUSES, STATUS_LABEL, FORMAT_LABEL, type FileInstance, type FileStatus } from '../../shared/types';
+import { QUALIFIED_STATUSES, STATUS_LABEL, FORMAT_LABEL, type FileFormat, type FileInstance, type FileStatus } from '../../shared/types';
 
 const emit = defineEmits<{ (e: 'open-slot', stageId: string, slotId: string): void }>();
 

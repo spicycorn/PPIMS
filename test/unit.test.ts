@@ -304,3 +304,176 @@ describe('projectToTemplateStages（项目→模板结构映射）', () => {
     expect(c.templateFileSrc).toBeUndefined();
   });
 });
+
+/* ================================================================
+ * 三、shared/classify.ts —— 分类纯逻辑（2.9）
+ * ================================================================ */
+import {
+  normalizeDimensions,
+  pruneCategoryValues,
+  distinctValues,
+  sanitizeProjectCategories,
+  defaultRootConfig,
+} from '../shared/classify';
+
+describe('shared/classify · 维度规整与取值清理', () => {
+  it('normalizeDimensions：保留合法项、去重名、生成稳定 id', () => {
+    const dims = normalizeDimensions([
+      { name: '地区' },
+      { name: '专业' },
+      { name: '地区' }, // 重名，应被去重
+      { name: '  ' }, // 空名，应剔除
+      { id: 'dim_custom', name: '客户' }, // 合法自定义 id，应保留
+    ]);
+    expect(dims.map((d) => d.name)).toEqual(['地区', '专业', '客户']);
+    expect(dims.find((d) => d.name === '客户')?.id).toBe('dim_custom');
+    // 生成的 id 都符合 dim_ 前缀
+    for (const d of dims) expect(d.id).toMatch(/^dim_/);
+    // id 互不冲突
+    const ids = new Set(dims.map((d) => d.id));
+    expect(ids.size).toBe(dims.length);
+  });
+
+  it('pruneCategoryValues：只保留仍在维度定义里的键、剔除空值', () => {
+    const dims = [{ id: 'dim_a', name: '地区' }, { id: 'dim_b', name: '专业' }];
+    const cleaned = pruneCategoryValues(
+      { dim_a: '华北', dim_b: '', dim_gone: 'x' },
+      dims,
+    );
+    expect(cleaned).toEqual({ dim_a: '华北' }); // dim_b 空值剔除、dim_gone 已删维度剔除
+  });
+
+  it('sanitizeProjectCategories：取值全空时删除 categories 键', () => {
+    const withCats = { name: 'P', code: 'C', establishDate: '2026-01-01', categories: { dim_a: '华北' } };
+    const dims = [{ id: 'dim_a', name: '地区' }];
+    expect(sanitizeProjectCategories(withCats, dims).categories).toEqual({ dim_a: '华北' });
+    const empty = { ...withCats, categories: { dim_a: '   ' } };
+    expect('categories' in sanitizeProjectCategories(empty, dims)).toBe(false);
+  });
+
+  it('distinctValues：取某维度出现过的取值（去重、排序）', () => {
+    const projects = [
+      { info: { name: 'A', code: '1', establishDate: '2026-01-01', categories: { dim_a: '华南' } } },
+      { info: { name: 'B', code: '2', establishDate: '2026-01-01', categories: { dim_a: '华北' } } },
+      { info: { name: 'C', code: '3', establishDate: '2026-01-01', categories: { dim_a: '华南' } } },
+      { info: { name: 'D', code: '4', establishDate: '2026-01-01' } },
+    ];
+    expect(distinctValues(projects, 'dim_a')).toEqual(['华北', '华南']);
+  });
+
+  it('defaultRootConfig：不预置任何业务维度（符合"不预置业务"）', () => {
+    expect(defaultRootConfig().dimensions).toEqual([]);
+  });
+});
+
+/* ================================================================
+ * 四、shared/scan.ts —— 多层扫描识别纯逻辑（2.10）
+ * ================================================================ */
+import {
+  scoreProject,
+  matchStage,
+  suggestNameCode,
+  isDocFileName,
+} from '../shared/scan';
+
+describe('shared/scan · 候选识别启发式', () => {
+  it('含 project.json → 直接判定高置信 PPIMS 项目', () => {
+    const s = scoreProject({
+      name: '某项目',
+      isPPIMS: true,
+      subdirs: [],
+      looseFileCount: 1,
+      looseDocFileCount: 0,
+    });
+    expect(s.isCandidate).toBe(true);
+    expect(s.confidence).toBe('high');
+  });
+
+  it('≥2 个有文件的资料子目录 → 高置信候选', () => {
+    const s = scoreProject({
+      name: '某工程',
+      isPPIMS: false,
+      subdirs: [
+        { name: '立项', fileCount: 3, docFileCount: 2 },
+        { name: '成果', fileCount: 5, docFileCount: 4 },
+      ],
+      looseFileCount: 0,
+      looseDocFileCount: 0,
+    });
+    expect(s.isCandidate).toBe(true);
+    expect(s.confidence).toBe('high');
+  });
+
+  it('仅 2 个文档文件（无多子目录）→ 中置信候选', () => {
+    const s = scoreProject({
+      name: '零散资料',
+      isPPIMS: false,
+      subdirs: [{ name: '杂项', fileCount: 2, docFileCount: 2 }],
+      looseFileCount: 0,
+      looseDocFileCount: 0,
+    });
+    expect(s.isCandidate).toBe(true);
+    expect(s.confidence).toBe('medium');
+  });
+
+  it('资料信号不足（无文档、单子目录无文件）→ 不判候选', () => {
+    const s = scoreProject({
+      name: '空目录',
+      isPPIMS: false,
+      subdirs: [{ name: 'x', fileCount: 0, docFileCount: 0 }],
+      looseFileCount: 1,
+      looseDocFileCount: 0,
+    });
+    expect(s.isCandidate).toBe(false);
+  });
+});
+
+describe('shared/scan · 子目录→阶段匹配（不硬编码业务）', () => {
+  const stages = [
+    { id: 's1', name: '项目立项' },
+    { id: 's2', name: '成果审查与归档' },
+  ];
+  it('子目录名包含完整阶段名 → 命中', () => {
+    expect(matchStage('项目立项材料', stages)).toBe('s1');
+    expect(matchStage('成果审查与归档资料', stages)).toBe('s2');
+  });
+  it('仅部分重叠（非完整阶段名）→ 不命中，避免误判', () => {
+    expect(matchStage('立项材料', stages)).toBeNull(); // 不含完整"项目立项"
+  });
+  it('无命中 → null（交用户手动归位）', () => {
+    expect(matchStage('完全不相干', stages)).toBeNull();
+  });
+  it('空白子目录名 → null', () => {
+    expect(matchStage('   ', stages)).toBeNull();
+  });
+});
+
+describe('shared/scan · 名称建议', () => {
+  it('按最后一个 _ 切分 名称 + 编号', () => {
+    expect(suggestNameCode('XX河道治理工程_60-F14742S')).toEqual({
+      name: 'XX河道治理工程',
+      code: '60-F14742S',
+    });
+  });
+  it('无 _ 时整体作名称、编号留空', () => {
+    expect(suggestNameCode('XX河道治理工程')).toEqual({ name: 'XX河道治理工程', code: '' });
+  });
+  it('右侧不像编号（纯文字）时不切分', () => {
+    const r = suggestNameCode('资料_汇总');
+    expect(r.name).toBe('资料_汇总'); // "汇总"是纯文字，整体作名称
+  });
+});
+
+describe('shared/scan · 文档文件判定', () => {
+  it('docx/xlsx/pdf/dwg/txt/csv 判为资料文件', () => {
+    expect(isDocFileName('勘察报告.docx')).toBe(true);
+    expect(isDocFileName('工作量表.xlsx')).toBe(true);
+    expect(isDocFileName('图纸.dwg')).toBe(true);
+    expect(isDocFileName('说明.txt')).toBe(true);
+    expect(isDocFileName('清单.csv')).toBe(true);
+  });
+  it('图片等不判为资料文件', () => {
+    expect(isDocFileName('照片.jpg')).toBe(false);
+    expect(isDocFileName('截图.png')).toBe(false);
+  });
+});

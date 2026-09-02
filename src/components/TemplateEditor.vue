@@ -12,7 +12,7 @@
       </div>
       <div v-if="template" class="tmpl-info mono">
         已挂载：{{ template.name }}
-        <el-tag size="small">{{ template.format }}</el-tag>
+        <el-tag size="small">{{ FORMAT_LABEL[template.format] }}</el-tag>
         <span class="muted">{{ template.path }}</span>
       </div>
       <div v-else class="muted" style="margin-top: 8px">
@@ -74,6 +74,7 @@ import { Upload, Refresh, Edit, DocumentAdd } from '@element-plus/icons-vue';
 import { storeToRefs } from 'pinia';
 import { useAppStore } from '../stores/app';
 import { useProjectStore } from '../stores/project';
+import { FORMAT_LABEL } from '../../shared/types';
 import type { Slot, Stage, Template } from '../../shared/types';
 import { slotDir } from '../../shared/paths';
 

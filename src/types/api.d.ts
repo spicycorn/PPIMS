@@ -1,7 +1,7 @@
 /**
  * 渲染层可见的 window.api 类型声明（与 electron/preload.ts 的 Api 对齐，但不引入 electron 类型）。
  */
-import type { Project, ProjectTemplate, TplCreateInput } from '../../shared/types';
+import type { Project, ProjectTemplate, TplCreateInput, RootConfig, ScanResult, ScanImportInput } from '../../shared/types';
 
 export interface OpenDialogOpts {
   title?: string;
@@ -26,10 +26,14 @@ export interface Api {
   openDialog(opts?: OpenDialogOpts): Promise<string | string[] | null>;
   saveDialog(opts?: { title?: string; defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }): Promise<string | null>;
 
+  getRootConfig(rootDir: string): Promise<RootConfig>;
+  saveRootConfig(rootDir: string, config: RootConfig): Promise<{ saved: string; dimensions: RootConfig['dimensions'] }>;
+
   listProjects(rootDir: string): Promise<ProjectListItem[]>;
   createProject(rootDir: string, project: Project): Promise<{ folder: string; folderName: string; rootPath: string }>;
   loadProject(projectFolder: string): Promise<{ project: Project; rootPath: string }>;
   saveProject(projectFolder: string, project: Project): Promise<{ saved: string }>;
+  patchProjectInfo(projectFolder: string, info: Partial<Project['info']>): Promise<{ saved: string; info: Project['info'] }>;
   deleteProject(projectFolder: string): Promise<{ deleted: string }>;
   openFolder(folder: string): Promise<{ error: string | null }>;
 
@@ -55,6 +59,10 @@ export interface Api {
 
   importScan(libraryDir: string, stages: Array<{ id: string; name: string }>): Promise<any>;
   importCopy(params: any): Promise<{ copied: Array<{ from: string; to: string }> }>;
+
+  // 多层级自动扫描 + 逐条导入（2.10）
+  scanProjects(rootDir: string): Promise<ScanResult>;
+  scanImport(input: ScanImportInput): Promise<{ folder: string; folderName: string; rootPath: string; copiedCount: number }>;
 
   // 项目架构模板（全局蓝图）
   listTemplates(): Promise<ProjectTemplate[]>;

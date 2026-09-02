@@ -3,7 +3,7 @@
  * contextIsolation 开启、nodeIntegration 关闭 —— 渲染层不直接接触 Node，安全且可控。
  */
 import { contextBridge, ipcRenderer } from 'electron';
-import type { Project, ProjectTemplate, TplCreateInput } from '../shared/types';
+import type { Project, ProjectTemplate, TplCreateInput, RootConfig, ScanImportInput, ScanResult } from '../shared/types';
 
 export interface OpenDialogOpts {
   title?: string;
@@ -17,11 +17,16 @@ export interface Api {
   openDialog(opts?: OpenDialogOpts): Promise<string | string[] | null>;
   saveDialog(opts?: { title?: string; defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }): Promise<string | null>;
 
+  // 根配置（分类维度，2.9）
+  getRootConfig(rootDir: string): Promise<RootConfig>;
+  saveRootConfig(rootDir: string, config: RootConfig): Promise<{ saved: string; dimensions: RootConfig['dimensions'] }>;
+
   // 项目
   listProjects(rootDir: string): Promise<Array<{ name: string; folder: string; info: Project['info'] | null }>>;
   createProject(rootDir: string, project: Project): Promise<{ folder: string; folderName: string; rootPath: string }>;
   loadProject(projectFolder: string): Promise<{ project: Project; rootPath: string }>;
   saveProject(projectFolder: string, project: Project): Promise<{ saved: string }>;
+  patchProjectInfo(projectFolder: string, info: Partial<Project['info']>): Promise<{ saved: string; info: Project['info'] }>;
   deleteProject(projectFolder: string): Promise<{ deleted: string }>;
   openFolder(folder: string): Promise<{ error: string | null }>;
 
@@ -43,6 +48,10 @@ export interface Api {
   importScan(libraryDir: string, stages: Array<{ id: string; name: string }>): Promise<any>;
   importCopy(params: any): Promise<{ copied: Array<{ from: string; to: string }> }>;
 
+  // 多层级自动扫描 + 逐条导入（2.10）
+  scanProjects(rootDir: string): Promise<ScanResult>;
+  scanImport(input: ScanImportInput): Promise<{ folder: string; folderName: string; rootPath: string; copiedCount: number }>;
+
   // 项目架构模板（全局蓝图）
   listTemplates(): Promise<ProjectTemplate[]>;
   getTemplate(id: string): Promise<ProjectTemplate>;
@@ -58,10 +67,14 @@ const api: Api = {
   openDialog: (opts) => ipcRenderer.invoke('dialog:open', opts),
   saveDialog: (opts) => ipcRenderer.invoke('dialog:save', opts),
 
+  getRootConfig: (rootDir) => ipcRenderer.invoke('root:config:get', rootDir),
+  saveRootConfig: (rootDir, config) => ipcRenderer.invoke('root:config:save', { rootDir, config }),
+
   listProjects: (rootDir) => ipcRenderer.invoke('project:list', rootDir),
   createProject: (rootDir, project) => ipcRenderer.invoke('project:create', { rootDir, project }),
   loadProject: (projectFolder) => ipcRenderer.invoke('project:load', projectFolder),
   saveProject: (projectFolder, project) => ipcRenderer.invoke('project:save', { projectFolder, project }),
+  patchProjectInfo: (projectFolder, info) => ipcRenderer.invoke('project:patchInfo', { projectFolder, info }),
   deleteProject: (projectFolder) => ipcRenderer.invoke('project:delete', projectFolder),
   openFolder: (folder) => ipcRenderer.invoke('project:openFolder', folder),
 
@@ -83,6 +96,9 @@ const api: Api = {
 
   importScan: (libraryDir, stages) => ipcRenderer.invoke('import:scan', { libraryDir, stages }),
   importCopy: (params) => ipcRenderer.invoke('import:copy', params),
+
+  scanProjects: (rootDir) => ipcRenderer.invoke('scan:projects', { rootDir }),
+  scanImport: (input) => ipcRenderer.invoke('scan:import', input),
 
   // 项目架构模板（全局蓝图）
   listTemplates: () => ipcRenderer.invoke('template:list'),

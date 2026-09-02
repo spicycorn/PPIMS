@@ -21,8 +21,11 @@ import {
   deleteTemplate,
   applyTemplateToNewProject,
 } from './services/template-service';
-import type { Project, TplCreateInput } from '../shared/types';
+import type { Project, TplCreateInput, RootConfig, ScannedCandidate, ScannedSubdir, ScanImportInput } from '../shared/types';
+import { PRESET_STAGES } from '../shared/types';
 import { sanitize, stageFolderName, TEMPLATES_DIR, DAILY_DIR, BACKUP_DIR } from '../shared/paths';
+import { scoreProject, isDocFileName } from '../shared/scan';
+import { normalizeDimensions } from '../shared/classify';
 
 /* ---------------- 工具 ---------------- */
 
@@ -71,6 +74,33 @@ export function registerIpc(): void {
       });
       if (res.canceled) return null;
       return res.filePath;
+    },
+  );
+
+  /* ---------------- 根配置（分类维度，2.9） ---------------- */
+
+  // 读取 <root>/ppims.json；不存在返回空维度（不预置业务）
+  ipcMain.handle(IPC.ROOT_CONFIG_GET, async (_e, rootDir: string) => {
+    if (!rootDir) return { dimensions: [] };
+    try {
+      const raw = await fs.readFile(path.join(rootDir, 'ppims.json'), 'utf-8');
+      const data = JSON.parse(raw) as RootConfig;
+      return { dimensions: Array.isArray(data.dimensions) ? data.dimensions : [] };
+    } catch {
+      return { dimensions: [] };
+    }
+  });
+
+  // 保存维度定义（先 normalize，防非法 id/重名/超量）
+  ipcMain.handle(
+    IPC.ROOT_CONFIG_SAVE,
+    async (_e, { rootDir, config }: { rootDir: string; config: RootConfig }) => {
+      await ensureDir(rootDir);
+      const dimensions = normalizeDimensions(config.dimensions ?? []);
+      const out: RootConfig = { dimensions };
+      const p = path.join(rootDir, 'ppims.json');
+      await fs.writeFile(p, JSON.stringify(out, null, 2), 'utf-8');
+      return { saved: p, dimensions };
     },
   );
 
@@ -139,6 +169,30 @@ export function registerIpc(): void {
     await fs.writeFile(jsonPath, JSON.stringify(data, null, 2), 'utf-8');
     return { saved: jsonPath };
   });
+
+  // 轻量打补项目信息（如分类取值）：读 → 合并 info → 写回，不整对象覆盖
+  ipcMain.handle(
+    IPC.PROJECT_PATCH_INFO,
+    async (_e, { projectFolder, info }: { projectFolder: string; info: Partial<Project['info']> }) => {
+      const jsonPath = path.join(projectFolder, 'project.json');
+      const raw = await fs.readFile(jsonPath, 'utf-8');
+      const data = JSON.parse(raw) as Project;
+      data.info = { ...data.info, ...info };
+      // 规整分类取值：只剔除空值（键的合法性由渲染层按维度定义校验后传入，见 2.9 惰性清理）
+      if (data.info.categories) {
+        const pruned: Record<string, string> = {};
+        for (const [k, v] of Object.entries(data.info.categories)) {
+          const s = (v ?? '').trim();
+          if (s) pruned[k] = s;
+        }
+        if (Object.keys(pruned).length) data.info.categories = pruned;
+        else delete data.info.categories;
+      }
+      data.updatedAt = new Date().toISOString();
+      await fs.writeFile(jsonPath, JSON.stringify(stripRuntime(data), null, 2), 'utf-8');
+      return { saved: jsonPath, info: data.info };
+    },
+  );
 
   ipcMain.handle(IPC.PROJECT_DELETE, async (_e, projectFolder: string) => {
     await fs.rm(projectFolder, { recursive: true, force: true });
@@ -304,6 +358,196 @@ export function registerIpc(): void {
         }
       }
       return { copied };
+    },
+  );
+
+  /* ---------------- 多层级自动扫描 + 逐条导入（2.10） ---------------- */
+
+  // 性能保护上限：递归深度、扫描目录总数、单目录列出文件数
+  const SCAN_MAX_DEPTH = 5;
+  const SCAN_MAX_DIRS = 3000;
+  const SCAN_MAX_LISTED = 500;
+
+  // 浅层扫描一个目录：列直接子项（目录+文件），不读任何文件内容
+  async function shallowList(dir: string): Promise<{ subdirs: string[]; files: string[] }> {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    const subdirs: string[] = [];
+    const files: string[] = [];
+    for (const e of entries) {
+      if (e.isDirectory()) subdirs.push(e.name);
+      else if (e.isFile()) files.push(e.name);
+    }
+    return { subdirs, files: files.slice(0, SCAN_MAX_LISTED) };
+  }
+
+  // 递归扫描（惰性：逐层展开；命中"高置信候选"即不再下钻其资料子目录）
+  ipcMain.handle(
+    IPC.SCAN_PROJECTS,
+    async (_e, { rootDir }: { rootDir: string }) => {
+      const out: ScannedCandidate[] = [];
+      const ctx = { scannedDirs: 0, truncated: false };
+
+      async function walk(dir: string, depth: number): Promise<void> {
+        if (depth > SCAN_MAX_DEPTH || ctx.scannedDirs >= SCAN_MAX_DIRS) {
+          ctx.truncated = true;
+          return;
+        }
+        ctx.scannedDirs++;
+        let subdirs: string[];
+        let files: string[];
+        try {
+          ({ subdirs, files } = await shallowList(dir));
+        } catch {
+          return; // 无权限/不存在，跳过
+        }
+        const name = path.basename(dir) || dir;
+        const isPPIMS = files.includes('project.json');
+
+        // 各子目录的文件数 + 文档数（浅层，仅列直接文件，不递归读内容）
+        const subdirInfos: ScannedSubdir[] = [];
+        for (const sd of subdirs) {
+          let sFiles: string[] = [];
+          try {
+            sFiles = (await shallowList(path.join(dir, sd))).files;
+          } catch {
+            sFiles = [];
+          }
+          subdirInfos.push({ name: sd, files: sFiles, fileCount: sFiles.length });
+        }
+
+        const score = scoreProject({
+          name,
+          isPPIMS,
+          subdirs: subdirInfos.map((s) => ({
+            name: s.name,
+            fileCount: s.fileCount,
+            docFileCount: s.files.filter(isDocFileName).length,
+          })),
+          looseFileCount: files.length,
+          looseDocFileCount: files.filter(isDocFileName).length,
+        });
+
+        if (score.isCandidate) {
+          const rel = relPosix(rootDir, dir) || '.';
+          out.push({
+            path: dir,
+            name,
+            isPPIMS,
+            subdirs: subdirInfos,
+            looseFileCount: files.length,
+            fileCount: files.length + subdirInfos.reduce((n, s) => n + s.fileCount, 0),
+            confidence: score.confidence,
+            relPath: rel,
+          });
+        }
+
+        // 高置信候选（PPIMS 或明确项目结构）：不下钻其资料子目录，避免把阶段目录误判为项目
+        if (score.isCandidate && score.confidence === 'high') return;
+
+        // 继续向子目录递归，寻找更深层的"项目"
+        for (const sd of subdirs) {
+          await walk(path.join(dir, sd), depth + 1);
+        }
+      }
+
+      await walk(rootDir, 1);
+      // 高置信优先、按相对路径排序，稳定展示
+      out.sort((a, b) =>
+        a.confidence === b.confidence
+          ? a.relPath.localeCompare(b.relPath, 'zh-CN')
+          : a.confidence === 'high'
+            ? -1
+            : 1,
+      );
+      return { root: rootDir, candidates: out, truncated: ctx.truncated, scannedDirs: ctx.scannedDirs };
+    },
+  );
+
+  // 逐条导入：把确认后的候选复制为 PPIMS 自包含项目（不改原文件、不覆盖已有）
+  ipcMain.handle(
+    IPC.SCAN_IMPORT,
+    async (_e, input: ScanImportInput) => {
+      const { sourceDir, info, subdirStage, rootDir, stages } = input;
+      // 生成自包含文件夹（名称_编号）
+      const folderName = sanitize(`${info.name}_${info.code || info.name}`);
+      const folder = path.join(rootDir, folderName);
+      if (await exists(folder)) {
+        throw new Error(`项目文件夹已存在：${folderName}（换一个名称或编号）`);
+      }
+      await ensureDir(folder);
+      await ensureDir(path.join(folder, TEMPLATES_DIR));
+      await ensureDir(path.join(folder, DAILY_DIR));
+      await ensureDir(path.join(folder, BACKUP_DIR));
+
+      // 预置阶段（共用 shared PRESET_STAGES，与 createDefaultProject 一致，不重复硬编码）
+      const presetStages = PRESET_STAGES;
+      const stageOrderName = presetStages.map((s) => s.name);
+      const project: Project = {
+        id: `proj_${Date.now().toString(36)}`,
+        info: { ...info, categories: info.categories },
+        rootPath: '',
+        stages: presetStages.map((s, i) => ({
+          id: `stage_${i}_${Date.now().toString(36)}`,
+          info: { name: s.name, description: s.description, startTime: '' },
+          slots: [],
+          weight: 1,
+          order: i,
+        })),
+        templates: [],
+        schemaVersion: 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      const data = stripRuntime(project);
+      await fs.writeFile(path.join(folder, 'project.json'), JSON.stringify(data, null, 2), 'utf-8');
+
+      // 把候选的"资料子目录"按用户指定的归并（subdirStage）复制进对应阶段目录
+      const copied: Array<{ from: string; to: string }> = [];
+      const srcEntries = await fs.readdir(sourceDir, { withFileTypes: true });
+      const srcSubdirs = srcEntries.filter((e) => e.isDirectory()).map((e) => e.name);
+      // 建立 子目录名 → 阶段文件夹名 的映射
+      for (const sd of srcSubdirs) {
+        const mapping = subdirStage.find((m) => m.name === sd);
+        const stageId = mapping?.stageId || '';
+        // stageId → 预置阶段名 → 阶段文件夹名
+        const stageName = stages.find((s) => s.id === stageId)?.name;
+        const order = stageName ? stageOrderName.indexOf(stageName) : -1;
+        const targetStageFolder = order >= 0 ? stageFolderName(order, stageName!) : DAILY_DIR;
+        // 复制该子目录下的直接文件（不递归读内容，仅文件级复制）
+        let sdFiles: string[] = [];
+        try {
+          sdFiles = await fs.readdir(path.join(sourceDir, sd));
+        } catch {
+          sdFiles = [];
+        }
+        const destDir = path.join(folder, targetStageFolder, sanitize(sd));
+        await ensureDir(destDir);
+        for (const f of sdFiles) {
+          const src = path.join(sourceDir, sd, f);
+          const dest = path.join(destDir, f);
+          try {
+            await copyFile(src, dest);
+            copied.push({ from: relPosix(sourceDir, src), to: relPosix(folder, dest) });
+          } catch {
+            /* 单文件失败不阻断整体 */
+          }
+        }
+      }
+      // 顶层散文件 → 日常管理
+      const srcFiles = srcEntries.filter((e) => e.isFile()).map((e) => e.name);
+      const dailyDest = path.join(folder, DAILY_DIR);
+      for (const f of srcFiles) {
+        const src = path.join(sourceDir, f);
+        const dest = path.join(dailyDest, f);
+        try {
+          await copyFile(src, dest);
+          copied.push({ from: relPosix(sourceDir, src), to: relPosix(folder, dest) });
+        } catch {
+          /* 忽略 */
+        }
+      }
+
+      return { folder, folderName, rootPath: folder, copiedCount: copied.length };
     },
   );
 

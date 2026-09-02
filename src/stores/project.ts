@@ -6,6 +6,7 @@
 import { defineStore } from 'pinia';
 import {
   SCHEMA_VERSION,
+  PRESET_STAGES,
   type FileInstance,
   type FileStatus,
   type Project,
@@ -279,15 +280,9 @@ export const useProjectStore = defineStore('project', {
   },
 });
 
-/** 新建项目的默认数据（6 阶段预置，设计文档 2.3） */
+/** 新建项目的默认数据（预置阶段，设计文档 2.3；共用 shared PRESET_STAGES，不重复硬编码） */
 export function createDefaultProject(info: Project['info']): Project {
-  const presetStages = [
-    { name: '项目立项', description: '任务接收、合同关联、任务书' },
-    { name: '项目策划', description: '大纲、QSHE、预算、分包（资料最密集）' },
-    { name: '项目执行', description: '工作量确认、试验结果、中间资料、安全记录' },
-    { name: '成果审查与归档', description: '报告、图纸、计算书、签字盖章、强制性条文' },
-    { name: '结算与总结', description: '结算材料、经验总结、安全文件汇编' },
-  ];
+  const presetStages = PRESET_STAGES;
   return {
     id: uid('proj'),
     info,

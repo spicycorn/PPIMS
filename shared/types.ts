@@ -21,6 +21,27 @@ export type FileFormat = 'docx' | 'xlsx' | 'pdf' | 'dwg' | 'image' | 'other';
 /** 字段类型（模板结构识别结果） */
 export type FieldKind = 'text' | 'table' | 'section';
 
+/** 分类维度（用户自定义、可扩展多维，设计文档 2.9） */
+export interface CategoryDimension {
+  /** 稳定 id（形如 dim_xxx，跨项目/跨取值引用用） */
+  id: string;
+  /** 维度名（用户可见，如"地区""专业"） */
+  name: string;
+}
+
+/**
+ * 项目分类取值：维度 id → 取值（自由文本）。
+ * 例：{ "dim_x": "华北", "dim_y": "岩土" }。
+ * 只落在"视图/组织"层，不影响项目内部结构与进度计算（设计文档 2.9）。
+ */
+export type CategoryValues = Record<string, string>;
+
+/** 数据根目录的根级配置（存 <root>/ppims.json，全局唯一，设计文档 2.9） */
+export interface RootConfig {
+  /** 分类维度定义（顺序即显示顺序） */
+  dimensions: CategoryDimension[];
+}
+
 /** 项目信息（建项时填写，设计文档 2.2.1） */
 export interface ProjectInfo {
   /** 项目名称（必填） */
@@ -37,6 +58,8 @@ export interface ProjectInfo {
   currentStageId?: string;
   /** 备注（选填） */
   remark?: string;
+  /** 分类取值（维度 id → 取值，设计文档 2.9；维度定义在根配置） */
+  categories?: CategoryValues;
 }
 
 /** 阶段信息（建/调阶段时填写，设计文档 2.2.2） */
@@ -252,8 +275,76 @@ export interface TplCreateInput {
   stages: TplStageInput[];
 }
 
+/* ============================================================
+ * 多层级自动扫描（设计文档 2.10）—— 轻量：只认目录结构 + 列文件名，
+ * 不读文件内容；识别纯逻辑在 shared/scan.ts（可单测），落盘在主进程。
+ * ============================================================ */
+
+/** 候选项目的直接子目录 + 该子目录下的文件名清单（不递归读内容） */
+export interface ScannedSubdir {
+  name: string;
+  files: string[]; // 该子目录直接文件的名字
+  fileCount: number;
+}
+
+/** 一个"像项目"的目录（扫描候选） */
+export interface ScannedCandidate {
+  /** 绝对路径（导入用） */
+  path: string;
+  /** 目录名（建议项目名来源） */
+  name: string;
+  /** 是否已是 PPIMS 项目（含 project.json，可直接加载/识别） */
+  isPPIMS: boolean;
+  /** 直接子目录 + 文件清单（isPPIMS=true 时用于核对结构） */
+  subdirs: ScannedSubdir[];
+  /** 顶层散文件数（不在子目录） */
+  looseFileCount: number;
+  /** 文件总数（顶层 + 各直接子目录，浅层） */
+  fileCount: number;
+  /** 置信度：high=含 project.json 或多资料子目录；medium=仅多文档文件 */
+  confidence: 'high' | 'medium';
+  /** 相对扫描根的 POSIX 路径（展示用） */
+  relPath: string;
+}
+
+/** 扫描整体结果 */
+export interface ScanResult {
+  root: string;
+  candidates: ScannedCandidate[];
+  /** 因深度/规模上限被跳过的目录数（性能保护） */
+  truncated: boolean;
+  scannedDirs: number;
+}
+
+/** 导入输入：用户确认/修正后的候选元数据 */
+export interface ScanImportInput {
+  /** 候选项目绝对路径 */
+  sourceDir: string;
+  /** 项目信息（名称/编号/立项时间/分类取值等，用户确认） */
+  info: ProjectInfo;
+  /** 各子目录 → 阶段 id 的归并（空串=归入日常管理） */
+  subdirStage: Array<{ name: string; stageId: string }>;
+  /** 目标数据根目录 */
+  rootDir: string;
+  /** 当前项目的阶段（用于"子目录名匹配阶段"） */
+  stages: Array<{ id: string; name: string }>;
+}
+
 /** 当前 schema 版本 */
 export const SCHEMA_VERSION = 1;
+
+/**
+ * 预置阶段（设计文档 2.3，勘测业务默认值）—— 单一事实源，
+ * 渲染层 createDefaultProject 与主进程 SCAN_IMPORT 共用，避免重复硬编码。
+ * 用户建项后可增删/改名/调序，这里只是"默认骨架"。
+ */
+export const PRESET_STAGES: Array<{ name: string; description: string }> = [
+  { name: '项目立项', description: '任务接收、合同关联、任务书' },
+  { name: '项目策划', description: '大纲、QSHE、预算、分包（资料最密集）' },
+  { name: '项目执行', description: '工作量确认、试验结果、中间资料、安全记录' },
+  { name: '成果审查与归档', description: '报告、图纸、计算书、签字盖章、强制性条文' },
+  { name: '结算与总结', description: '结算材料、经验总结、安全文件汇编' },
+];
 
 /** 状态流转定义（用于界面与校验） */
 export const STATUS_FLOW: Record<FileStatus, FileStatus | null> = {
