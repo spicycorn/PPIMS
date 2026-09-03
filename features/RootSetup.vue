@@ -21,7 +21,7 @@
 
 <script setup lang="ts">
 import { storeToRefs } from 'pinia';
-import { useAppStore } from '../stores/app';
+import { useAppStore } from '../core/stores/app';
 
 const app = useAppStore();
 const { rootDir } = storeToRefs(app);

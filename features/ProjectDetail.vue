@@ -25,7 +25,6 @@
         </div>
         <div style="flex: 1"></div>
         <el-button :icon="Collection" @click="tplOpen = true">模板库</el-button>
-        <el-button :icon="Download" @click="importOpen = true">导入文件库</el-button>
         <el-button :icon="Search" @click="searchOpen = true">检索</el-button>
         <el-button :icon="Refresh" :loading="saving" @click="save">保存</el-button>
         <el-button :icon="FolderOpened" @click="openFolder">打开文件夹</el-button>
@@ -68,11 +67,6 @@
       </div>
     </div>
 
-    <!-- 导入文件库 -->
-    <el-dialog v-model="importOpen" title="导入项目文件库" width="760px" top="8vh">
-      <ImportPanel />
-    </el-dialog>
-
     <!-- 检索 -->
     <el-dialog v-model="searchOpen" title="检索 · 条件筛选" width="820px" top="8vh">
       <SearchPanel @open-slot="onSearchOpenSlot" />
@@ -88,16 +82,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
-import { Refresh, FolderOpened, Back, Briefcase, Download, Search, Collection } from '@element-plus/icons-vue';
+import { Refresh, FolderOpened, Back, Briefcase, Search, Collection } from '@element-plus/icons-vue';
 import { storeToRefs } from 'pinia';
-import { useAppStore } from '../stores/app';
-import { useProjectStore } from '../stores/project';
+import { useAppStore } from '../core/stores/app';
+import { useProjectStore } from '../core/stores/project';
 import StagePanel from './StagePanel.vue';
 import SlotWorkspace from './SlotWorkspace.vue';
-import ImportPanel from './ImportPanel.vue';
 import SearchPanel from './SearchPanel.vue';
 import TemplateManager from './TemplateManager.vue';
-import { QUALIFIED_STATUSES } from '../../shared/types';
+import { QUALIFIED_STATUSES } from '../core/types';
 
 const app = useAppStore();
 const projectStore = useProjectStore();
@@ -105,7 +98,6 @@ const { project, dirty } = storeToRefs(projectStore);
 
 const selectedStageId = ref('');
 const selectedSlotId = ref('');
-const importOpen = ref(false);
 const searchOpen = ref(false);
 const tplOpen = ref(false);
 

@@ -51,8 +51,8 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue';
 import { Setting } from '@element-plus/icons-vue';
-import { FORMAT_LABEL, NECESSITY_LABEL, type Slot, type Stage } from '../../shared/types';
-import { useProjectStore } from '../stores/project';
+import { FORMAT_LABEL, NECESSITY_LABEL, type Slot, type Stage } from '../core/types';
+import { useProjectStore } from '../core/stores/project';
 import TemplateEditor from './TemplateEditor.vue';
 import FilePanel from './FilePanel.vue';
 

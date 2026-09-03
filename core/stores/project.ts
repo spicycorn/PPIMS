@@ -13,8 +13,8 @@ import {
   type Slot,
   type Stage,
   type Template,
-} from '../../shared/types';
-import { computeAllProgress } from '../../shared/progress';
+} from '../types';
+import { computeAllProgress } from '../progress';
 import { useAppStore } from './app';
 
 function uid(prefix = 'id'): string {

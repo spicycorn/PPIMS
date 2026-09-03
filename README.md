@@ -1,26 +1,28 @@
 # PPIMS · 个人项目信息管理系统
 
-桌面端工具，把"项目 → 阶段 → 槽位 → 文件"这条主链路管起来：上传模板、按结构识别、
-原位编辑 Word/Excel、多版本、状态流转、进度实时重算、检索，以及**深层递归扫描**把外部"像项目"的文件夹
-（含树状结构 / 嵌套项目）识别并**批量导入**为自包含项目。
+桌面端工具，把"项目 → 阶段 → 槽位 → 文件"这条主链路管起来：**提示选项目架构模板** + 新字段表单建项、
+上传模板、按结构识别、原位编辑 Word/Excel、多版本、状态流转、进度实时重算、检索，
+以及**可扩展多维分类**（地区/专业/客户…，视图层分组/筛选/排序）。
 
 技术栈：Electron + Vue 3 + TypeScript + Vite + Element Plus + Pinia。
 详见《[PPIMS-设计文档.md](docs/PPIMS-设计文档.md)》（唯一事实源）。
 
-**应用图标**：可爱小人整理文件夹，`public/` 下由 `scripts/gen-icon.mjs`（矢量绘图 + 纯 Node 手写 PNG 编码，零依赖）生成，
-`scripts/derive-icons.mjs` 派生多尺寸 PNG 与 `icon.ico`（16/32/48/256）。
+**应用图标**：可爱小人整理文件夹，`public/` 下由 `dev/scripts/gen-icon.mjs`（矢量绘图 + 纯 Node 手写 PNG 编码，零依赖）生成，
+`dev/scripts/derive-icons.mjs` 派生多尺寸 PNG 与 `icon.ico`（16/32/48/256）。
 窗口标题栏/任务栏、浏览器 favicon、Windows exe 图标均用它。重新生成：`pnpm run icons`。
 
 ### 目录结构
 
 ```
 PPIMS/
-├─ src/                 # 渲染层（Vue 3 + Element Plus）：App / components / stores / types
-├─ electron/            # 主进程（Node/Electron）：main / preload / ipc / services（docx·xlsx 引擎、模板服务、fs）
-├─ shared/              # 跨层共享：types / paths / template-mapping / util（不依赖 electron）
+├─ core/                # 核心管理层：types / paths / classify / progress / template-mapping / util（纯逻辑）
+│   ├─ services/        #   主进程服务：docx·xlsx 引擎、模板服务、fs
+│   └─ stores/          #   状态（app / project，Pinia）
+│   └─ main / preload / ipc / ipc-channels   # Electron 主进程与桥接
+│   └─ App.vue / app-main.ts / style.css / api.d.ts   # 渲染层骨架
+├─ features/            # 功能层（Vue 3 + Element Plus UI 组件）：ProjectList / ProjectDetail / Stage / Slot / File / Search / Template…
+├─ dev/                 # 非 GitHub 相关：test（unit.test.ts）+ scripts（build-electron、gen-icon、derive-icons）
 ├─ public/              # 应用图标（icon.png / icon-*.png / icon.ico）
-├─ scripts/             # 构建与图标脚本（build-electron、gen-icon、derive-icons）
-├─ test/                # 单元测试（unit.test.ts：Word 原位替换保真 + 模板映射）
 ├─ docs/                # 设计文档（PPIMS-设计文档.md，唯一事实源）
 ├─ .github/             # CI（Build & Release，Actions 触发打包/发布）
 ├─ index.html           # Vite 入口（含 favicon）
@@ -29,9 +31,10 @@ PPIMS/
 └─ *.config / tsconfig / vitest.config   # Vite / 类型 / 测试配置
 ```
 
-> 分层原则：`shared/` 是纯逻辑、无 electron 依赖，渲染层与主进程都能安全 import；
-> 引擎与 IPC 只在 `electron/`；UI 只在 `src/`。重复的 fs/助手统一收到 `electron/services/fs.ts`、
-> `shared/util.ts`、`shared/template-mapping.ts`，避免各写一份。
+> 分层原则：`core/` 是核心管理层（纯逻辑 + 主进程 + 状态 + 渲染骨架），`features/` 是功能层（UI 组件）；
+> `core/` 里的纯逻辑（types / paths / classify / progress / template-mapping / util）无 electron 依赖，
+> 渲染层与主进程都能安全 import。重复的 fs/助手统一收到 `core/services/fs.ts`、`core/util.ts`、
+> `core/template-mapping.ts`，避免各写一份。
 
 ---
 

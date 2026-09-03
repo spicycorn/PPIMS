@@ -72,11 +72,11 @@ import { computed, reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Upload, Refresh, Edit, DocumentAdd } from '@element-plus/icons-vue';
 import { storeToRefs } from 'pinia';
-import { useAppStore } from '../stores/app';
-import { useProjectStore } from '../stores/project';
-import { FORMAT_LABEL } from '../../shared/types';
-import type { Slot, Stage, Template } from '../../shared/types';
-import { slotDir } from '../../shared/paths';
+import { useAppStore } from '../core/stores/app';
+import { useProjectStore } from '../core/stores/project';
+import { FORMAT_LABEL } from '../core/types';
+import type { Slot, Stage, Template } from '../core/types';
+import { slotDir } from '../core/paths';
 
 const props = defineProps<{ stage: Stage; slot: Slot }>();
 const app = useAppStore();

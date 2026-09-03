@@ -183,7 +183,7 @@
 import { onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, FolderOpened } from '@element-plus/icons-vue';
-import { useAppStore } from '../stores/app';
+import { useAppStore } from '../core/stores/app';
 import type {
   FileFormat,
   Necessity,
@@ -191,10 +191,10 @@ import type {
   TplCreateInput,
   TplSlotInput,
   TplStageInput,
-} from '../../shared/types';
-import { FORMAT_LABEL, NECESSITY_LABEL } from '../../shared/types';
-import { countTemplateSlots } from '../../shared/template-mapping';
-import { formatDateTime } from '../../shared/util';
+} from '../core/types';
+import { FORMAT_LABEL, NECESSITY_LABEL } from '../core/types';
+import { countTemplateSlots } from '../core/template-mapping';
+import { formatDateTime } from '../core/util';
 
 const props = defineProps<{
   /** 当前项目文件夹（用于"从当前项目另存"）；空 = 不在项目内 */

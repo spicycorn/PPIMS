@@ -52,11 +52,11 @@
 import { computed } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Upload, Download, Delete, Folder } from '@element-plus/icons-vue';
-import { useAppStore } from '../stores/app';
-import { useProjectStore } from '../stores/project';
-import { STATUS_LABEL, FORMAT_LABEL, type FileFormat, type FileInstance, type Slot, type Stage } from '../../shared/types';
-import { slotDir } from '../../shared/paths';
-import { formatDateTime } from '../../shared/util';
+import { useAppStore } from '../core/stores/app';
+import { useProjectStore } from '../core/stores/project';
+import { STATUS_LABEL, FORMAT_LABEL, type FileFormat, type FileInstance, type Slot, type Stage } from '../core/types';
+import { slotDir } from '../core/paths';
+import { formatDateTime } from '../core/util';
 
 const props = defineProps<{ stage: Stage; slot: Slot }>();
 const app = useAppStore();

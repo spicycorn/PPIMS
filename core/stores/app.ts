@@ -2,7 +2,7 @@
  * 应用级状态：根目录、当前视图、当前打开的项目文件夹、分类维度（根配置，2.9）。
  */
 import { defineStore } from 'pinia';
-import type { CategoryDimension } from '../../shared/types';
+import type { CategoryDimension } from '../types';
 
 export type AppView = 'setup' | 'list' | 'detail';
 

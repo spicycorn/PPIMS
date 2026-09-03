@@ -6,7 +6,7 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const SIZE = 512; // 输出像素
 const SS = 4; // 超采样倍数（渲染 2048 再降到 512，线条更顺滑）
 const W = SIZE * SS;

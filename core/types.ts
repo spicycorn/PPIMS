@@ -275,69 +275,6 @@ export interface TplCreateInput {
   stages: TplStageInput[];
 }
 
-/* ============================================================
- * 多层级自动扫描（设计文档 2.10）—— 轻量：只认目录结构 + 列文件名，
- * 不读文件内容；识别纯逻辑在 shared/scan.ts（可单测），落盘在主进程。
- * ============================================================ */
-
-/** 候选项目的直接子目录 + 该子目录下的文件名清单（不递归读内容） */
-export interface ScannedSubdir {
-  name: string;
-  /** 该子目录"直接文件"的名字（界面展示用；导入按"最近祖先子目录"递归复制，不依赖此清单深度） */
-  files: string[];
-  /** 该子目录的"递归文件数"（v0.3.0：文件嵌套任意深度都计入） */
-  fileCount: number;
-}
-
-/** 一个"像项目"的目录（扫描候选） */
-export interface ScannedCandidate {
-  /** 绝对路径（导入用） */
-  path: string;
-  /** 目录名（建议项目名来源） */
-  name: string;
-  /** 是否已是 PPIMS 项目（含 project.json，可直接加载/识别） */
-  isPPIMS: boolean;
-  /** 直接子目录 + 文件清单（isPPIMS=true 时用于核对结构） */
-  subdirs: ScannedSubdir[];
-  /** 顶层散文件数（不在子目录） */
-  looseFileCount: number;
-  /** 文件总数（v0.3.0：递归累加，文件嵌套任意深度都计入） */
-  fileCount: number;
-  /** 置信度：high=含 project.json 或多资料子目录；medium=仅多文档文件 */
-  confidence: 'high' | 'medium';
-  /** 候选强度：strong=项目特征明确；weak=疑似（嵌套候选链去重 + 排序用） */
-  strength: 'strong' | 'weak';
-  /** 命中原因（展示用，说明为何被识别为候选） */
-  reason: string;
-  /** 嵌套深度（相对扫描根，1=顶层；展示"所在层级"用） */
-  nestDepth: number;
-  /** 相对扫描根的 POSIX 路径（展示用） */
-  relPath: string;
-}
-
-/** 扫描整体结果 */
-export interface ScanResult {
-  root: string;
-  candidates: ScannedCandidate[];
-  /** 因深度/规模上限被跳过的目录数（性能保护） */
-  truncated: boolean;
-  scannedDirs: number;
-}
-
-/** 导入输入：用户确认/修正后的候选元数据 */
-export interface ScanImportInput {
-  /** 候选项目绝对路径 */
-  sourceDir: string;
-  /** 项目信息（名称/编号/立项时间/分类取值等，用户确认） */
-  info: ProjectInfo;
-  /** 各子目录 → 阶段 id 的归并（空串=归入日常管理） */
-  subdirStage: Array<{ name: string; stageId: string }>;
-  /** 目标数据根目录 */
-  rootDir: string;
-  /** 当前项目的阶段（用于"子目录名匹配阶段"） */
-  stages: Array<{ id: string; name: string }>;
-}
-
 /** 当前 schema 版本 */
 export const SCHEMA_VERSION = 1;
 

@@ -76,7 +76,7 @@
 import { storeToRefs } from 'pinia';
 import { ElMessageBox } from 'element-plus';
 import { Plus, Top, Bottom, Edit, Delete, Folder, Files, Paperclip, Document } from '@element-plus/icons-vue';
-import { useProjectStore } from '../stores/project';
+import { useProjectStore } from '../core/stores/project';
 import {
   NECESSITY_LABEL,
   STATUS_LABEL,
@@ -84,7 +84,7 @@ import {
   type Necessity,
   type Slot,
   type Stage,
-} from '../../shared/types';
+} from '../core/types';
 
 defineProps<{ selectedStageId: string; selectedSlotId: string }>();
 const emit = defineEmits<{

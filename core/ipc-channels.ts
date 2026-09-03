@@ -1,7 +1,7 @@
 /**
  * IPC 通道名与参数/返回类型（主进程与渲染层共用的契约）。
  */
-import type { Project } from '../shared/types';
+import type { Project } from './types';
 
 export const IPC = {
   // 对话框
@@ -36,14 +36,6 @@ export const IPC = {
   XLSX_RECOGNIZE: 'xlsx:recognize',
   XLSX_APPLY: 'xlsx:apply',
 
-  // 导入
-  IMPORT_SCAN: 'import:scan',
-  IMPORT_COPY: 'import:copy',
-
-  // 多层级自动扫描 + 逐条导入（设计文档 2.10）
-  SCAN_PROJECTS: 'scan:projects',
-  SCAN_IMPORT: 'scan:import',
-
   // 项目架构模板（全局蓝图）
   TPL_LIST: 'template:list',
   TPL_GET: 'template:get',
@@ -56,19 +48,6 @@ export const IPC = {
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];
-
-/** 文件库扫描结果（一个外部"项目文件库"） */
-export interface LibraryScanResult {
-  root: string;
-  subdirs: Array<{
-    name: string;
-    /** 匹配到的阶段 id（按子目录名），null 表示未匹配 */
-    matchedStageId: string | null;
-    files: string[]; // 相对该子目录的文件名
-  }>;
-  /** 顶层散文件（不在任何子目录） */
-  looseFiles: string[];
-}
 
 /** Word 识别结果（渲染层用） */
 export interface DocxRecognizeResult {

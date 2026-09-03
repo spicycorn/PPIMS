@@ -9,7 +9,6 @@
               <span>项目列表</span>
               <el-tag size="small" type="info">{{ visibleItems.length }} 个</el-tag>
               <div style="flex: 1"></div>
-              <el-button size="small" :icon="Search" @click="scanOpen = true">扫描导入</el-button>
               <el-button size="small" :icon="Operation" @click="dimOpen = true">分类维度</el-button>
               <el-button size="small" :icon="Refresh" @click="refresh">刷新</el-button>
             </div>
@@ -74,45 +73,14 @@
           <template #header>
             <div class="row-gap">
               <el-icon><Plus /></el-icon>
-              <span>新建项目（项目信息，建项时填写）</span>
+              <span>新建项目</span>
             </div>
           </template>
           <el-form :model="form" label-width="90px" :rules="rules" ref="formRef">
-            <el-form-item label="项目名称" prop="name">
-              <el-input v-model="form.name" placeholder="如：XX 河道治理工程勘察" />
-            </el-form-item>
-            <el-form-item label="项目编号" prop="code">
-              <el-input v-model="form.code" placeholder="如：60-F14742S" />
-            </el-form-item>
-            <el-form-item label="立项时间" prop="establishDate">
-              <el-date-picker v-model="form.establishDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" />
-            </el-form-item>
-            <el-form-item label="专业">
-              <el-select v-model="form.specialty" clearable placeholder="选填">
-                <el-option label="岩土" value="岩土" />
-                <el-option label="测绘" value="测绘" />
-                <el-option label="水文" value="水文" />
-                <el-option label="物探" value="物探" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="工程地点">
-              <el-input v-model="form.location" placeholder="选填" />
-            </el-form-item>
-            <el-form-item label="备注">
-              <el-input v-model="form.remark" type="textarea" :rows="2" placeholder="选填" />
-            </el-form-item>
-
-            <!-- 分类取值（动态：按当前维度渲染，2.9） -->
-            <template v-if="app.dimensions.length">
-              <el-divider content-position="left">分类（可选）</el-divider>
-              <el-form-item v-for="d in app.dimensions" :key="d.id" :label="d.name">
-                <el-input v-model="categoryValues[d.id]" :placeholder="`如：${d.name === '地区' ? '华北 / 华南…' : '填一个取值，如 岩土 / 客户A'}`" />
-              </el-form-item>
-            </template>
-
-            <el-divider content-position="left">从模板创建（选填）</el-divider>
+            <!-- ① 提示选模板（建项第一步，v0.4.0） -->
+            <el-divider content-position="left">① 选择项目架构模板（可选，一键生成阶段/槽位/模板文件）</el-divider>
             <el-form-item label="套用模板">
-              <el-select v-model="selectedTemplateId" clearable placeholder="选一个模板，一键生成阶段/槽位/模板文件" style="width: 100%">
+              <el-select v-model="selectedTemplateId" clearable placeholder="选一个模板作为骨架（不选则建空项目）" style="width: 100%">
                 <el-option v-for="t in templateList" :key="t.id" :label="t.name" :value="t.id">
                   <span>{{ t.name }}</span>
                   <span class="muted" style="float: right; font-size: 12px">{{ t.stages.length }} 阶段 · {{ countTemplateSlots(t) }} 槽位</span>
@@ -127,6 +95,46 @@
                 show-icon
               />
             </el-form-item>
+
+            <!-- ② 新字段表单（v0.4.0：地区/名称/阶段/类型/编号/下发时间/备注） -->
+            <el-divider content-position="left">② 项目信息</el-divider>
+            <el-form-item label="地区" prop="location">
+              <el-input v-model="form.location" placeholder="项目所在地区" />
+            </el-form-item>
+            <el-form-item label="名称" prop="name">
+              <el-input v-model="form.name" placeholder="如：XX 河道治理工程勘察" />
+            </el-form-item>
+            <el-form-item label="阶段">
+              <el-input v-model="form.currentStageId" placeholder="初始阶段（可由模板带入，选填）" />
+            </el-form-item>
+            <el-form-item label="类型">
+              <el-select v-model="form.specialty" clearable filterable placeholder="选填">
+                <el-option label="勘测" value="勘测" />
+                <el-option label="设计" value="设计" />
+                <el-option label="施工" value="施工" />
+                <el-option label="岩土" value="岩土" />
+                <el-option label="测绘" value="测绘" />
+                <el-option label="水文" value="水文" />
+                <el-option label="物探" value="物探" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="编号" prop="code">
+              <el-input v-model="form.code" placeholder="如：60-F14742S" />
+            </el-form-item>
+            <el-form-item label="下发时间">
+              <el-date-picker v-model="form.establishDate" type="date" value-format="YYYY-MM-DD" placeholder="选填" />
+            </el-form-item>
+            <el-form-item label="备注">
+              <el-input v-model="form.remark" type="textarea" :rows="2" placeholder="选填" />
+            </el-form-item>
+
+            <!-- 分类取值（动态：按当前维度渲染，2.9） -->
+            <template v-if="app.dimensions.length">
+              <el-divider content-position="left">分类（可选）</el-divider>
+              <el-form-item v-for="d in app.dimensions" :key="d.id" :label="d.name">
+                <el-input v-model="categoryValues[d.id]" :placeholder="`如：${d.name === '地区' ? '华北 / 华南…' : '填一个取值，如 岩土 / 客户A'}`" />
+              </el-form-item>
+            </template>
 
             <el-form-item>
               <el-button type="primary" :loading="creating" @click="create">
@@ -176,26 +184,20 @@
     <el-dialog v-model="tplOpen" title="模板库" width="900px" top="6vh" destroy-on-close>
       <TemplateManager @saved="loadTemplates" />
     </el-dialog>
-
-    <!-- 多层级自动扫描导入（2.10） -->
-    <el-dialog v-model="scanOpen" title="多层级自动扫描 · 识别外部项目" width="880px" top="6vh" destroy-on-close @close="onScanClose">
-      <ScanPanel />
-    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus';
-import { Refresh, Plus, List, Collection, Operation, Edit, Delete, Search } from '@element-plus/icons-vue';
+import { Refresh, Plus, List, Collection, Operation, Edit, Delete } from '@element-plus/icons-vue';
 import { storeToRefs } from 'pinia';
-import { useAppStore } from '../stores/app';
-import { useProjectStore, createDefaultProject } from '../stores/project';
+import { useAppStore } from '../core/stores/app';
+import { useProjectStore, createDefaultProject } from '../core/stores/project';
 import TemplateManager from './TemplateManager.vue';
-import ScanPanel from './ScanPanel.vue';
-import type { ProjectInfo, ProjectTemplate, CategoryDimension, CategoryValues } from '../../shared/types';
-import { countTemplateSlots } from '../../shared/template-mapping';
-import { distinctValues } from '../../shared/classify';
+import type { ProjectInfo, ProjectTemplate, CategoryDimension, CategoryValues } from '../core/types';
+import { countTemplateSlots } from '../core/template-mapping';
+import { distinctValues } from '../core/classify';
 
 const app = useAppStore();
 const projectStore = useProjectStore();
@@ -209,12 +211,6 @@ const formRef = ref<FormInstance>();
 const templateList = ref<ProjectTemplate[]>([]);
 const selectedTemplateId = ref('');
 const tplOpen = ref(false);
-const scanOpen = ref(false);
-
-/** 扫描对话框关闭后刷新项目列表（可能导入了新项目） */
-function onScanClose() {
-  void refresh();
-}
 const selectedTemplateName = computed(
   () => templateList.value.find((t) => t.id === selectedTemplateId.value)?.name ?? '',
 );
@@ -286,16 +282,16 @@ async function loadTemplates() {
 const form = reactive<ProjectInfo>({
   name: '',
   code: '',
-  establishDate: new Date().toISOString().slice(0, 10),
+  establishDate: '',
   specialty: '',
   location: '',
   remark: '',
+  currentStageId: '',
 });
 
 const rules: FormRules = {
   name: [{ required: true, message: '请填写项目名称', trigger: 'blur' }],
   code: [{ required: true, message: '请填写项目编号', trigger: 'change' }],
-  establishDate: [{ required: true, message: '请选择立项时间', trigger: 'change' }],
 };
 
 async function refresh() {
@@ -327,7 +323,8 @@ async function create() {
       ElMessage.success(`项目已创建：${info.name}`);
     }
     // 重置表单与分类取值
-    Object.assign(form, { name: '', code: '', specialty: '', location: '', remark: '' });
+    Object.assign(form, { name: '', code: '', specialty: '', location: '', remark: '', currentStageId: '', establishDate: '' });
+    selectedTemplateId.value = '';
     for (const k of Object.keys(categoryValues)) delete categoryValues[k];
     await app.openProject(folder);
     await projectStore.load(folder);

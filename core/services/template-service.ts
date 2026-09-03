@@ -21,9 +21,9 @@ import type {
   TplCreateInput,
   TplStageInput,
   TplSlotInput,
-} from '../../shared/types';
-import { sanitize, TEMPLATES_DIR, stageFolderName } from '../../shared/paths';
-import { projectToTemplateStages } from '../../shared/template-mapping';
+} from '../types';
+import { sanitize, TEMPLATES_DIR, stageFolderName } from '../paths';
+import { projectToTemplateStages } from '../template-mapping';
 import { ensureDir, copyFile } from './fs';
 
 /* 输入类型（TplSlotInput/TplStageInput/TplCreateInput）定义在 shared/types.ts，

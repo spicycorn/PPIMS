@@ -7,7 +7,7 @@ import path from 'node:path';
 import { rmSync } from 'node:fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(__dirname, '..');
+const root = path.resolve(__dirname, '../..');
 const outdir = path.join(root, 'dist-electron');
 
 // 这些库在运行时由 Electron 提供或属于 node 内置，不能作为 bundle 依赖
@@ -31,12 +31,12 @@ const common = {
 await Promise.all([
   esbuild.build({
     ...common,
-    entryPoints: [path.join(root, 'electron', 'main.ts')],
+    entryPoints: [path.join(root, 'core', 'main.ts')],
     outdir,
   }),
   esbuild.build({
     ...common,
-    entryPoints: [path.join(root, 'electron', 'preload.ts')],
+    entryPoints: [path.join(root, 'core', 'preload.ts')],
     outdir,
     // preload 运行在 contextIsolation 环境，禁止被 bundle 进外部依赖
   }),

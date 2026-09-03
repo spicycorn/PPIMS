@@ -20,10 +20,9 @@ files:
   - dist/**
   - dist-electron/**
   - "!node_modules/**"
-  - "!src/**"
-  - "!electron/**"
-  - "!scripts/**"
-  - "!shared/**"
+  - "!core/**"
+  - "!features/**"
+  - "!dev/**"
   - "!.github/**"
   - "!*.md"
   - "!.npmrc"

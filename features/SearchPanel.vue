@@ -52,8 +52,8 @@
 import { computed, ref } from 'vue';
 import { Search } from '@element-plus/icons-vue';
 import { storeToRefs } from 'pinia';
-import { useProjectStore } from '../stores/project';
-import { QUALIFIED_STATUSES, STATUS_LABEL, FORMAT_LABEL, type FileFormat, type FileInstance, type FileStatus } from '../../shared/types';
+import { useProjectStore } from '../core/stores/project';
+import { QUALIFIED_STATUSES, STATUS_LABEL, FORMAT_LABEL, type FileFormat, type FileInstance, type FileStatus } from '../core/types';
 
 const emit = defineEmits<{ (e: 'open-slot', stageId: string, slotId: string): void }>();
 

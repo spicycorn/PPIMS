@@ -19,22 +19,20 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "@shared/*": ["shared/*"],
-      "@electron/*": ["electron/*"]
+      "@/*": ["core/*"],
+      "@shared/*": ["core/*"],
+      "@electron/*": ["core/*"]
     },
     "types": ["vite/client", "node"]
   },
   "include": [
-    "src/**/*.ts",
-    "src/**/*.d.ts",
-    "src/**/*.tsx",
-    "src/**/*.vue",
-    "shared/**/*.ts",
-    "electron/**/*.ts",
-    "test/**/*.ts",
+    "core/**/*.ts",
+    "core/**/*.d.ts",
+    "core/**/*.vue",
+    "features/**/*.vue",
+    "dev/test/**/*.ts",
     "vite.config.ts",
     "vitest.config.ts",
-    "scripts/**/*.mjs"
+    "dev/scripts/**/*.mjs"
   ]
 }

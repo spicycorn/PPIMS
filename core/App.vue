@@ -10,9 +10,9 @@
 import { storeToRefs } from 'pinia';
 import { useAppStore } from './stores/app';
 import { useProjectStore } from './stores/project';
-import RootSetup from './components/RootSetup.vue';
-import ProjectList from './components/ProjectList.vue';
-import ProjectDetail from './components/ProjectDetail.vue';
+import RootSetup from '../features/RootSetup.vue';
+import ProjectList from '../features/ProjectList.vue';
+import ProjectDetail from '../features/ProjectDetail.vue';
 
 const app = useAppStore();
 const { view } = storeToRefs(app);

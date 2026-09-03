@@ -1,7 +1,7 @@
 /**
  * 渲染层可见的 window.api 类型声明（与 electron/preload.ts 的 Api 对齐，但不引入 electron 类型）。
  */
-import type { Project, ProjectTemplate, TplCreateInput, RootConfig, ScanResult, ScanImportInput } from '../../shared/types';
+import type { Project, ProjectTemplate, TplCreateInput, RootConfig } from './types';
 
 export interface OpenDialogOpts {
   title?: string;
@@ -56,13 +56,6 @@ export interface Api {
     edits: Array<{ addr: string; value: string }>,
     outputAbsPath?: string,
   ): Promise<{ written: string; applied: number }>;
-
-  importScan(libraryDir: string, stages: Array<{ id: string; name: string }>): Promise<any>;
-  importCopy(params: any): Promise<{ copied: Array<{ from: string; to: string }> }>;
-
-  // 多层级自动扫描 + 逐条导入（2.10）
-  scanProjects(rootDir: string): Promise<ScanResult>;
-  scanImport(input: ScanImportInput): Promise<{ folder: string; folderName: string; rootPath: string; copiedCount: number }>;
 
   // 项目架构模板（全局蓝图）
   listTemplates(): Promise<ProjectTemplate[]>;

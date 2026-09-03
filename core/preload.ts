@@ -3,7 +3,7 @@
  * contextIsolation 开启、nodeIntegration 关闭 —— 渲染层不直接接触 Node，安全且可控。
  */
 import { contextBridge, ipcRenderer } from 'electron';
-import type { Project, ProjectTemplate, TplCreateInput, RootConfig, ScanImportInput, ScanResult } from '../shared/types';
+import type { Project, ProjectTemplate, TplCreateInput, RootConfig } from './types';
 
 export interface OpenDialogOpts {
   title?: string;
@@ -43,14 +43,6 @@ export interface Api {
   // Excel
   recognizeXlsx(absPath: string): Promise<any>;
   applyXlsx(absPath: string, activeSheet: string, edits: Array<{ addr: string; value: string }>, outputAbsPath?: string): Promise<{ written: string; applied: number }>;
-
-  // 导入
-  importScan(libraryDir: string, stages: Array<{ id: string; name: string }>): Promise<any>;
-  importCopy(params: any): Promise<{ copied: Array<{ from: string; to: string }> }>;
-
-  // 多层级自动扫描 + 逐条导入（2.10）
-  scanProjects(rootDir: string): Promise<ScanResult>;
-  scanImport(input: ScanImportInput): Promise<{ folder: string; folderName: string; rootPath: string; copiedCount: number }>;
 
   // 项目架构模板（全局蓝图）
   listTemplates(): Promise<ProjectTemplate[]>;
@@ -93,12 +85,6 @@ const api: Api = {
   recognizeXlsx: (absPath) => ipcRenderer.invoke('xlsx:recognize', absPath),
   applyXlsx: (absPath, activeSheet, edits, outputAbsPath) =>
     ipcRenderer.invoke('xlsx:apply', { absPath, activeSheet, edits, outputAbsPath }),
-
-  importScan: (libraryDir, stages) => ipcRenderer.invoke('import:scan', { libraryDir, stages }),
-  importCopy: (params) => ipcRenderer.invoke('import:copy', params),
-
-  scanProjects: (rootDir) => ipcRenderer.invoke('scan:projects', { rootDir }),
-  scanImport: (input) => ipcRenderer.invoke('scan:import', input),
 
   // 项目架构模板（全局蓝图）
   listTemplates: () => ipcRenderer.invoke('template:list'),
