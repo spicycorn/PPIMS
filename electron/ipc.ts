@@ -3,7 +3,7 @@
  * 全部基于本地 Node fs 与 jszip/xlsx，离线可用、不依赖任何云服务。
  */
 import { ipcMain, dialog, shell } from 'electron';
-import { promises as fs } from 'node:fs';
+import { promises as fs, type Dirent } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { IPC, type LibraryScanResult } from './ipc-channels';
@@ -21,10 +21,10 @@ import {
   deleteTemplate,
   applyTemplateToNewProject,
 } from './services/template-service';
-import type { Project, TplCreateInput, RootConfig, ScannedCandidate, ScannedSubdir, ScanImportInput } from '../shared/types';
+import type { Project, TplCreateInput, RootConfig, ScannedCandidate, ScanImportInput } from '../shared/types';
 import { PRESET_STAGES } from '../shared/types';
 import { sanitize, stageFolderName, TEMPLATES_DIR, DAILY_DIR, BACKUP_DIR } from '../shared/paths';
-import { scoreProject, isDocFileName } from '../shared/scan';
+import { walkTree, matchStage, type ScanTreeNode } from '../shared/scan';
 import { normalizeDimensions } from '../shared/classify';
 
 /* ---------------- 工具 ---------------- */
@@ -361,14 +361,20 @@ export function registerIpc(): void {
     },
   );
 
-  /* ---------------- 多层级自动扫描 + 逐条导入（2.10） ---------------- */
+  /* ---------------- 多层级自动扫描 + 逐条导入（2.10，v0.3.0 全程递归） ---------------- */
 
-  // 性能保护上限：递归深度、扫描目录总数、单目录列出文件数
-  const SCAN_MAX_DEPTH = 5;
-  const SCAN_MAX_DIRS = 3000;
-  const SCAN_MAX_LISTED = 500;
+  // 性能保护上限：递归深度（v0.3.0 提到 12，覆盖绝大多数真实项目树）、扫描目录总数、单目录列出文件数
+  const SCAN_MAX_DEPTH = 12;
+  const SCAN_MAX_DIRS = 8000;
+  const SCAN_MAX_LISTED = 800;
 
-  // 浅层扫描一个目录：列直接子项（目录+文件），不读任何文件内容
+  // 跳过这些目录（系统/缓存/依赖，避免误报与无谓遍历）
+  const SCAN_SKIP_DIRS = new Set([
+    'node_modules', '.git', '.hg', '.svn', '__pycache__', '.venv', 'venv',
+    'dist', 'dist-electron', 'build', 'out', '.cache', '.next', '.nuxt',
+  ]);
+
+  // 浅层列出一个目录的直接子项（目录+文件），不读任何文件内容
   async function shallowList(dir: string): Promise<{ subdirs: string[]; files: string[] }> {
     const entries = await fs.readdir(dir, { withFileTypes: true });
     const subdirs: string[] = [];
@@ -380,17 +386,18 @@ export function registerIpc(): void {
     return { subdirs, files: files.slice(0, SCAN_MAX_LISTED) };
   }
 
-  // 递归扫描（惰性：逐层展开；命中"高置信候选"即不再下钻其资料子目录）
+  // 递归扫描（v0.3.0：全程下钻、不再"高置信即停"；命中候选仍继续找嵌套项目；
+  // 识别/去重纯逻辑走 shared/scan.ts walkTree，可单测、不硬编码业务）
   ipcMain.handle(
     IPC.SCAN_PROJECTS,
     async (_e, { rootDir }: { rootDir: string }) => {
-      const out: ScannedCandidate[] = [];
       const ctx = { scannedDirs: 0, truncated: false };
 
-      async function walk(dir: string, depth: number): Promise<void> {
+      // 按"目录树"惰性列出（深度/规模保护），供 walkTree 纯逻辑消费
+      async function buildTree(dir: string, depth: number): Promise<ScanTreeNode | null> {
         if (depth > SCAN_MAX_DEPTH || ctx.scannedDirs >= SCAN_MAX_DIRS) {
           ctx.truncated = true;
-          return;
+          return null;
         }
         ctx.scannedDirs++;
         let subdirs: string[];
@@ -398,68 +405,45 @@ export function registerIpc(): void {
         try {
           ({ subdirs, files } = await shallowList(dir));
         } catch {
-          return; // 无权限/不存在，跳过
+          return null; // 无权限/不存在，跳过
         }
         const name = path.basename(dir) || dir;
-        const isPPIMS = files.includes('project.json');
-
-        // 各子目录的文件数 + 文档数（浅层，仅列直接文件，不递归读内容）
-        const subdirInfos: ScannedSubdir[] = [];
-        for (const sd of subdirs) {
-          let sFiles: string[] = [];
-          try {
-            sFiles = (await shallowList(path.join(dir, sd))).files;
-          } catch {
-            sFiles = [];
-          }
-          subdirInfos.push({ name: sd, files: sFiles, fileCount: sFiles.length });
-        }
-
-        const score = scoreProject({
+        const node: ScanTreeNode = {
           name,
-          isPPIMS,
-          subdirs: subdirInfos.map((s) => ({
-            name: s.name,
-            fileCount: s.fileCount,
-            docFileCount: s.files.filter(isDocFileName).length,
-          })),
-          looseFileCount: files.length,
-          looseDocFileCount: files.filter(isDocFileName).length,
-        });
-
-        if (score.isCandidate) {
-          const rel = relPosix(rootDir, dir) || '.';
-          out.push({
-            path: dir,
-            name,
-            isPPIMS,
-            subdirs: subdirInfos,
-            looseFileCount: files.length,
-            fileCount: files.length + subdirInfos.reduce((n, s) => n + s.fileCount, 0),
-            confidence: score.confidence,
-            relPath: rel,
-          });
-        }
-
-        // 高置信候选（PPIMS 或明确项目结构）：不下钻其资料子目录，避免把阶段目录误判为项目
-        if (score.isCandidate && score.confidence === 'high') return;
-
-        // 继续向子目录递归，寻找更深层的"项目"
+          isPPIMS: files.includes('project.json'),
+          files,
+          subdirs: [],
+        };
         for (const sd of subdirs) {
-          await walk(path.join(dir, sd), depth + 1);
+          if (SCAN_SKIP_DIRS.has(sd)) continue;
+          const child = await buildTree(path.join(dir, sd), depth + 1);
+          if (child) node.subdirs.push(child);
         }
+        return node;
       }
 
-      await walk(rootDir, 1);
-      // 高置信优先、按相对路径排序，稳定展示
-      out.sort((a, b) =>
-        a.confidence === b.confidence
+      const tree = await buildTree(rootDir, 1);
+      if (!tree) {
+        return { root: rootDir, candidates: [], truncated: ctx.truncated, scannedDirs: ctx.scannedDirs };
+      }
+
+      // walkTree 产出候选（relPath 为相对扫描根的路径，'.'=扫描根本身）
+      const relCandidates = walkTree(tree);
+      // relPath → 绝对路径（导入用）
+      const candidates: ScannedCandidate[] = relCandidates.map((c) => ({
+        ...c,
+        path: c.relPath === '.' ? rootDir : path.join(rootDir, c.relPath),
+      }));
+
+      // 强候选优先、同强度按相对路径排序，稳定展示
+      candidates.sort((a, b) =>
+        a.strength === b.strength
           ? a.relPath.localeCompare(b.relPath, 'zh-CN')
-          : a.confidence === 'high'
+          : a.strength === 'strong'
             ? -1
             : 1,
       );
-      return { root: rootDir, candidates: out, truncated: ctx.truncated, scannedDirs: ctx.scannedDirs };
+      return { root: rootDir, candidates, truncated: ctx.truncated, scannedDirs: ctx.scannedDirs };
     },
   );
 
@@ -501,49 +485,73 @@ export function registerIpc(): void {
       const data = stripRuntime(project);
       await fs.writeFile(path.join(folder, 'project.json'), JSON.stringify(data, null, 2), 'utf-8');
 
-      // 把候选的"资料子目录"按用户指定的归并（subdirStage）复制进对应阶段目录
+      // 把候选的"资料"按"最近祖先子目录"归并到阶段目录递归复制（v0.3.0 嵌套结构不丢失）
+      // 规则：
+      // - 文件所在"第一个子目录"（最近祖先）决定归入哪个阶段（用户 subdirStage 指定，或按名匹配阶段，或"日常管理"）；
+      // - 该子目录之下的更深层结构按原相对路径保留（如 策划/大纲/XX.docx → <阶段>/策划/大纲/XX.docx）；
+      // - 顶层散文件 → 日常管理。
       const copied: Array<{ from: string; to: string }> = [];
-      const srcEntries = await fs.readdir(sourceDir, { withFileTypes: true });
-      const srcSubdirs = srcEntries.filter((e) => e.isDirectory()).map((e) => e.name);
-      // 建立 子目录名 → 阶段文件夹名 的映射
-      for (const sd of srcSubdirs) {
-        const mapping = subdirStage.find((m) => m.name === sd);
+
+      // 子目录名 → 目标阶段文件夹名（用户指定优先，否则按名匹配阶段，否则日常管理）
+      const targetFolderForSubdir = (sdName: string): string => {
+        const mapping = subdirStage.find((m) => m.name === sdName);
         const stageId = mapping?.stageId || '';
-        // stageId → 预置阶段名 → 阶段文件夹名
         const stageName = stages.find((s) => s.id === stageId)?.name;
         const order = stageName ? stageOrderName.indexOf(stageName) : -1;
-        const targetStageFolder = order >= 0 ? stageFolderName(order, stageName!) : DAILY_DIR;
-        // 复制该子目录下的直接文件（不递归读内容，仅文件级复制）
-        let sdFiles: string[] = [];
-        try {
-          sdFiles = await fs.readdir(path.join(sourceDir, sd));
-        } catch {
-          sdFiles = [];
+        if (order >= 0) return stageFolderName(order, stageName!);
+        // 用户未指定 → 用阶段名匹配（matchStage 纯逻辑）
+        const matched = matchStage(sdName, stages);
+        if (matched) {
+          const mName = stages.find((s) => s.id === matched)?.name;
+          const mOrder = mName ? stageOrderName.indexOf(mName) : -1;
+          if (mOrder >= 0) return stageFolderName(mOrder, mName!);
         }
-        const destDir = path.join(folder, targetStageFolder, sanitize(sd));
-        await ensureDir(destDir);
-        for (const f of sdFiles) {
-          const src = path.join(sourceDir, sd, f);
-          const dest = path.join(destDir, f);
-          try {
-            await copyFile(src, dest);
-            copied.push({ from: relPosix(sourceDir, src), to: relPosix(folder, dest) });
-          } catch {
-            /* 单文件失败不阻断整体 */
+        return DAILY_DIR;
+      };
+
+      // 递归收集源目录所有文件（带相对路径），带深度/规模保护
+      const allFiles: Array<{ rel: string }> = [];
+      const impCaps = { scannedDirs: 0, truncated: false };
+      const IMPORT_MAX_DEPTH = 12;
+      const IMPORT_MAX_DIRS = 8000;
+      async function collectFiles(dir: string, rel: string, depth: number): Promise<void> {
+        if (depth > IMPORT_MAX_DEPTH || impCaps.scannedDirs >= IMPORT_MAX_DIRS) {
+          impCaps.truncated = true;
+          return;
+        }
+        impCaps.scannedDirs++;
+        let entries: Dirent<string>[];
+        try {
+          entries = await fs.readdir(dir, { withFileTypes: true });
+        } catch {
+          return;
+        }
+        for (const ent of entries) {
+          if (ent.isDirectory()) {
+            await collectFiles(path.join(dir, ent.name), rel ? `${rel}/${ent.name}` : ent.name, depth + 1);
+          } else if (ent.isFile()) {
+            allFiles.push({ rel: rel ? `${rel}/${ent.name}` : ent.name });
           }
         }
       }
-      // 顶层散文件 → 日常管理
-      const srcFiles = srcEntries.filter((e) => e.isFile()).map((e) => e.name);
-      const dailyDest = path.join(folder, DAILY_DIR);
-      for (const f of srcFiles) {
-        const src = path.join(sourceDir, f);
-        const dest = path.join(dailyDest, f);
+      await collectFiles(sourceDir, '', 1);
+
+      // 逐文件复制：按"最近祖先子目录"归并阶段，保留更深层相对结构
+      for (const { rel } of allFiles) {
+        const parts = rel.split('/');
+        const fileBase = parts[parts.length - 1];
+        // 最近祖先子目录 = 第一个路径段（若文件在顶层则无）
+        const ancestorSubdir = parts.length > 1 ? parts[0] : '';
+        const targetFolder = ancestorSubdir ? targetFolderForSubdir(ancestorSubdir) : DAILY_DIR;
+        const destDir = path.join(folder, targetFolder, ...(ancestorSubdir ? [sanitize(ancestorSubdir)] : []));
+        const dest = path.join(destDir, sanitize(fileBase));
+        const src = path.join(sourceDir, ...parts);
         try {
+          await ensureDir(destDir);
           await copyFile(src, dest);
-          copied.push({ from: relPosix(sourceDir, src), to: relPosix(folder, dest) });
+          copied.push({ from: rel, to: relPosix(folder, dest) });
         } catch {
-          /* 忽略 */
+          /* 单文件失败不阻断整体 */
         }
       }
 

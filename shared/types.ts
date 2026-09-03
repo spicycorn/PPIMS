@@ -283,7 +283,9 @@ export interface TplCreateInput {
 /** 候选项目的直接子目录 + 该子目录下的文件名清单（不递归读内容） */
 export interface ScannedSubdir {
   name: string;
-  files: string[]; // 该子目录直接文件的名字
+  /** 该子目录"直接文件"的名字（界面展示用；导入按"最近祖先子目录"递归复制，不依赖此清单深度） */
+  files: string[];
+  /** 该子目录的"递归文件数"（v0.3.0：文件嵌套任意深度都计入） */
   fileCount: number;
 }
 
@@ -299,10 +301,16 @@ export interface ScannedCandidate {
   subdirs: ScannedSubdir[];
   /** 顶层散文件数（不在子目录） */
   looseFileCount: number;
-  /** 文件总数（顶层 + 各直接子目录，浅层） */
+  /** 文件总数（v0.3.0：递归累加，文件嵌套任意深度都计入） */
   fileCount: number;
   /** 置信度：high=含 project.json 或多资料子目录；medium=仅多文档文件 */
   confidence: 'high' | 'medium';
+  /** 候选强度：strong=项目特征明确；weak=疑似（嵌套候选链去重 + 排序用） */
+  strength: 'strong' | 'weak';
+  /** 命中原因（展示用，说明为何被识别为候选） */
+  reason: string;
+  /** 嵌套深度（相对扫描根，1=顶层；展示"所在层级"用） */
+  nestDepth: number;
   /** 相对扫描根的 POSIX 路径（展示用） */
   relPath: string;
 }

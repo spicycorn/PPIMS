@@ -374,6 +374,11 @@ import {
   matchStage,
   suggestNameCode,
   isDocFileName,
+  walkTree,
+  recursiveFileCount,
+  recursiveDocFileCount,
+  scoreTreeNode,
+  type ScanTreeNode,
 } from '../shared/scan';
 
 describe('shared/scan · 候选识别启发式', () => {
@@ -475,5 +480,144 @@ describe('shared/scan · 文档文件判定', () => {
   it('图片等不判为资料文件', () => {
     expect(isDocFileName('照片.jpg')).toBe(false);
     expect(isDocFileName('截图.png')).toBe(false);
+  });
+});
+
+/* ================================================================
+ * 五、shared/scan · 递归目录树扫描 + 嵌套候选链去重（v0.3.0）
+ * ================================================================ */
+
+/** 便捷构造目录树节点 */
+function t(
+  name: string,
+  opts: { isPPIMS?: boolean; files?: string[]; subdirs?: ScanTreeNode[] } = {},
+): ScanTreeNode {
+  return { name, isPPIMS: opts.isPPIMS ?? false, files: opts.files ?? [], subdirs: opts.subdirs ?? [] };
+}
+
+describe('shared/scan · 递归树扫描（深层树状结构识别）', () => {
+  it('3 层嵌套（年份 → 项目 → 阶段）：识别出最像项目的那一层，不报年份分组文件夹', () => {
+    const root = t('root', {
+      subdirs: [
+        t('2023年项目', {
+          subdirs: [
+            t('某某河道', {
+              subdirs: [
+                t('项目策划', { files: ['大纲.docx', '预算.xlsx'] }),
+                t('项目执行', { files: ['记录.docx'] }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    const out = walkTree(root);
+    // 只保留"最像项目"的 某某河道（strong），年份/分组层被去重
+    expect(out).toHaveLength(1);
+    expect(out[0].name).toBe('某某河道');
+    expect(out[0].strength).toBe('strong');
+    expect(out[0].confidence).toBe('high');
+    expect(out[0].nestDepth).toBe(3);
+    // 文件总数为递归累加（3 个文件）
+    expect(out[0].fileCount).toBe(3);
+  });
+
+  it('深层文件计入候选信号：文件嵌套 3 层仍识别为项目', () => {
+    // 项目根 → 阶段 → 子文件夹 → 文件（文件在第 3 层子目录）
+    const root = t('root', {
+      subdirs: [
+        t('某工程', {
+          subdirs: [
+            t('项目策划', { subdirs: [t('大纲', { files: ['总则.docx'] })] }),
+            t('项目执行', { subdirs: [t('试验', { files: ['数据.xlsx'] })] }),
+          ],
+        }),
+      ],
+    });
+    const out = walkTree(root);
+    expect(out).toHaveLength(1);
+    expect(out[0].name).toBe('某工程');
+    // 深层文件（总则.docx / 数据.xlsx）计入资料信号 → strong
+    expect(out[0].strength).toBe('strong');
+    expect(out[0].fileCount).toBe(2);
+  });
+
+  it('嵌套项目（项目里再套项目）：保留更深层、更具体的候选', () => {
+    const root = t('root', {
+      subdirs: [
+        t('外项目', {
+          // 外项目本身有 2 个资料子目录（strong），内部又嵌套一个"内项目"
+          subdirs: [
+            t('资料甲', { files: ['甲.docx', '甲2.docx'] }),
+            t('内项目', {
+              subdirs: [
+                t('阶段A', { files: ['a.docx', 'a2.docx'] }),
+                t('阶段B', { files: ['b.docx', 'b2.docx'] }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    const out = walkTree(root);
+    const names = out.map((c) => c.name);
+    // 内项目（更深层、更具体）必须被保留
+    expect(names).toContain('内项目');
+  });
+
+  it('顶层散文件 + 单子目录：不误报为项目（信号不足）', () => {
+    const root = t('root', {
+      files: ['说明.txt'],
+      subdirs: [t('空子目录', { subdirs: [] })],
+    });
+    const out = walkTree(root);
+    // 无 ≥2 资料子目录、无 ≥2 文档文件 → 不识别任何候选
+    expect(out.length).toBe(0);
+  });
+
+  it('含 project.json 的目录：识别为 high / strong（PPIMS 项目）', () => {
+    const root = t('root', {
+      subdirs: [t('某PPIMS', { isPPIMS: true, files: ['project.json'] })],
+    });
+    const out = walkTree(root);
+    const p = out.find((c) => c.name === '某PPIMS');
+    expect(p).toBeDefined();
+    expect(p!.confidence).toBe('high');
+    expect(p!.strength).toBe('strong');
+    expect(p!.isPPIMS).toBe(true);
+  });
+});
+
+describe('shared/scan · 递归文件计数（纯函数）', () => {
+  it('recursiveFileCount：累加所有层级的文件', () => {
+    const node = t('P', {
+      files: ['a.docx'],
+      subdirs: [
+        t('S1', { files: ['b.xlsx', 'c.pdf'] }),
+        t('S2', { subdirs: [t('S2a', { files: ['d.dwg'] })] }),
+      ],
+    });
+    expect(recursiveFileCount(node)).toBe(4);
+  });
+
+  it('recursiveDocFileCount：只累加"资料"文件，图片不计', () => {
+    const node = t('P', {
+      files: ['a.docx', '照片.jpg'],
+      subdirs: [t('S1', { files: ['b.xlsx', '截图.png'] })],
+    });
+    expect(recursiveDocFileCount(node)).toBe(2); // a.docx + b.xlsx
+  });
+
+  it('scoreTreeNode：递归感知打分（深层文件构成资料子目录 → strong）', () => {
+    const node = t('P', {
+      subdirs: [
+        t('策划', { subdirs: [t('子', { files: ['x.docx'] })] }),
+        t('执行', { subdirs: [t('子', { files: ['y.xlsx'] })] }),
+      ],
+    });
+    const s = scoreTreeNode(node);
+    expect(s.isCandidate).toBe(true);
+    expect(s.confidence).toBe('high');
+    expect(s.strength).toBe('strong');
   });
 });
