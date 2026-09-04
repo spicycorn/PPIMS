@@ -77,38 +77,38 @@
             </div>
           </template>
           <el-form :model="form" label-width="90px" :rules="rules" ref="formRef">
-            <!-- ① 提示选模板（建项第一步，v0.4.0） -->
-            <el-divider content-position="left">① 选择项目架构模板（可选，一键生成阶段/槽位/模板文件）</el-divider>
+            <!-- ① 提示选模板（建项第一步） -->
+            <el-divider content-position="left">① 套用结构模板（可选，一键生成"阶段 + 插槽"树）</el-divider>
             <el-form-item label="套用模板">
-              <el-select v-model="selectedTemplateId" clearable placeholder="选一个模板作为骨架（不选则建空项目）" style="width: 100%">
+              <el-select v-model="selectedTemplateId" clearable placeholder="选一个结构模板作为骨架（不选则建空项目）" style="width: 100%">
                 <el-option v-for="t in templateList" :key="t.id" :label="t.name" :value="t.id">
                   <span>{{ t.name }}</span>
-                  <span class="muted" style="float: right; font-size: 12px">{{ t.stages.length }} 阶段 · {{ countTemplateSlots(t) }} 槽位</span>
+                  <span class="muted" style="float: right; font-size: 12px">{{ countTemplateSlots(t) }} 个插槽</span>
                 </el-option>
               </el-select>
             </el-form-item>
             <el-form-item v-if="selectedTemplateId">
               <el-alert
-                :title="`将套用「${selectedTemplateName}」的完整结构（阶段+槽位+各槽位模板文件），创建后无需再逐一手填槽位`"
+                :title="`将套用「${selectedTemplateName}」的结构（阶段 + 插槽树），创建后无需再逐一手填插槽`"
                 type="success"
                 :closable="false"
                 show-icon
               />
             </el-form-item>
 
-            <!-- ② 新字段表单（v0.4.0：地区/名称/阶段/类型/编号/下发时间/备注） -->
+            <!-- ② 项目信息（地区/名称/阶段/类型/编号/下发时间/备注） -->
             <el-divider content-position="left">② 项目信息</el-divider>
-            <el-form-item label="地区" prop="location">
-              <el-input v-model="form.location" placeholder="项目所在地区" />
+            <el-form-item label="地区" prop="region">
+              <el-input v-model="form.region" placeholder="项目所在地区" />
             </el-form-item>
             <el-form-item label="名称" prop="name">
               <el-input v-model="form.name" placeholder="如：XX 河道治理工程勘察" />
             </el-form-item>
             <el-form-item label="阶段">
-              <el-input v-model="form.currentStageId" placeholder="初始阶段（可由模板带入，选填）" />
+              <el-input v-model="form.stage" placeholder="初始阶段（选填）" />
             </el-form-item>
             <el-form-item label="类型">
-              <el-select v-model="form.specialty" clearable filterable placeholder="选填">
+              <el-select v-model="form.type" clearable filterable allow-create placeholder="选填（如 勘测/设计/施工…）">
                 <el-option label="勘测" value="勘测" />
                 <el-option label="设计" value="设计" />
                 <el-option label="施工" value="施工" />
@@ -122,7 +122,7 @@
               <el-input v-model="form.code" placeholder="如：60-F14742S" />
             </el-form-item>
             <el-form-item label="下发时间">
-              <el-date-picker v-model="form.establishDate" type="date" value-format="YYYY-MM-DD" placeholder="选填" />
+              <el-date-picker v-model="form.dispatchDate" type="date" value-format="YYYY-MM-DD" placeholder="选填" />
             </el-form-item>
             <el-form-item label="备注">
               <el-input v-model="form.remark" type="textarea" :rows="2" placeholder="选填" />
@@ -138,10 +138,10 @@
 
             <el-form-item>
               <el-button type="primary" :loading="creating" @click="create">
-                {{ selectedTemplateId ? '按模板创建项目' : '创建项目' }}
+                {{ selectedTemplateId ? '按结构模板创建项目' : '创建项目' }}
               </el-button>
-              <el-button :icon="Collection" @click="tplOpen = true">模板库</el-button>
-              <span class="muted">{{ selectedTemplateId ? '套用所选模板结构' : '不选模板则预置 5 个阶段' }}（可增删/改名/调序）</span>
+              <el-button :icon="Collection" @click="tplOpen = true">结构模板库</el-button>
+              <span class="muted">{{ selectedTemplateId ? '套用所选结构模板' : '不选模板则建空项目' }}（插槽可增删/改名/调序/嵌套）</span>
             </el-form-item>
           </el-form>
         </el-card>
@@ -180,8 +180,8 @@
       </template>
     </el-dialog>
 
-    <!-- 模板库（全局；列表页无当前项目，"从当前项目另存"不可用） -->
-    <el-dialog v-model="tplOpen" title="模板库" width="900px" top="6vh" destroy-on-close>
+    <!-- 结构模板库（全局；列表页无当前项目，"从当前项目另存"不可用） -->
+    <el-dialog v-model="tplOpen" title="结构模板库" width="900px" top="6vh" destroy-on-close>
       <TemplateManager @saved="loadTemplates" />
     </el-dialog>
   </div>
@@ -195,7 +195,7 @@ import { storeToRefs } from 'pinia';
 import { useAppStore } from '../core/stores/app';
 import { useProjectStore, createDefaultProject } from '../core/stores/project';
 import TemplateManager from './TemplateManager.vue';
-import type { ProjectInfo, ProjectTemplate, CategoryDimension, CategoryValues } from '../core/types';
+import type { ProjectInfo, StructureTemplate, CategoryDimension, CategoryValues } from '../core/types';
 import { countTemplateSlots } from '../core/template-mapping';
 import { distinctValues } from '../core/classify';
 
@@ -207,8 +207,8 @@ const items = ref<Array<{ name: string; folder: string; info: ProjectInfo | null
 const creating = ref(false);
 const formRef = ref<FormInstance>();
 
-// 模板（全局蓝图）
-const templateList = ref<ProjectTemplate[]>([]);
+// 结构模板（全局蓝图）
+const templateList = ref<StructureTemplate[]>([]);
 const selectedTemplateId = ref('');
 const tplOpen = ref(false);
 const selectedTemplateName = computed(
@@ -240,7 +240,7 @@ const visibleItems = computed(() => {
   const byName = (a: Item, b: Item) =>
     (a.info?.name ?? '').localeCompare(b.info?.name ?? '', 'zh-CN');
   if (sortMode.value === 'date') {
-    list.sort((a, b) => (b?.info?.establishDate ?? '').localeCompare(a?.info?.establishDate ?? ''));
+    list.sort((a, b) => (b?.info?.dispatchDate ?? '').localeCompare(a?.info?.dispatchDate ?? ''));
   } else if (sortMode.value === 'value' && groupDim.value) {
     list.sort((a, b) =>
       (a?.info?.categories?.[groupDim.value] ?? '').localeCompare(b?.info?.categories?.[groupDim.value] ?? '', 'zh-CN'),
@@ -282,11 +282,11 @@ async function loadTemplates() {
 const form = reactive<ProjectInfo>({
   name: '',
   code: '',
-  establishDate: '',
-  specialty: '',
-  location: '',
+  region: '',
+  stage: '',
+  type: '',
+  dispatchDate: '',
   remark: '',
-  currentStageId: '',
 });
 
 const rules: FormRules = {
@@ -323,7 +323,7 @@ async function create() {
       ElMessage.success(`项目已创建：${info.name}`);
     }
     // 重置表单与分类取值
-    Object.assign(form, { name: '', code: '', specialty: '', location: '', remark: '', currentStageId: '', establishDate: '' });
+    Object.assign(form, { name: '', code: '', region: '', stage: '', type: '', dispatchDate: '', remark: '' });
     selectedTemplateId.value = '';
     for (const k of Object.keys(categoryValues)) delete categoryValues[k];
     await app.openProject(folder);

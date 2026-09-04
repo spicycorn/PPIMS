@@ -3,109 +3,184 @@
     <div class="card-block">
       <div class="row-gap" style="margin-bottom: 10px">
         <el-icon><Folder /></el-icon>
-        <strong>文件实例（多版本 · 状态流转）</strong>
-        <el-tag size="small" type="info">{{ slot.files.length }} 个文件</el-tag>
+        <strong>文件</strong>
+        <el-tag size="small" type="info">{{ slot.files.length }} 个</el-tag>
         <div style="flex: 1"></div>
         <el-button type="primary" :icon="Upload" @click="upload">上传文件</el-button>
       </div>
 
-      <el-empty v-if="slot.files.length === 0" description="还没有文件，可上传现成文件，或在「模板编辑」页生成" :image-size="70" />
+      <el-empty v-if="slot.files.length === 0" description="还没有文件，点击右上的上传文件按钮添加（可一次传多个）" :image-size="70" />
 
       <el-table v-else :data="slot.files" size="default">
-        <el-table-column label="版本" width="70">
+        <el-table-column label="名称 / 格式" min-width="180">
           <template #default="{ row }">
-            <el-tag size="small" :type="row.version === latestVersion ? 'primary' : 'info'">
-              v{{ row.version }}
-            </el-tag>
+            <div class="row-gap">
+              <el-button size="small" link @click="rename(row)" :title="row.name">{{ row.name }}</el-button>
+              <el-tag size="small" :type="formatTagType(row.format)">{{ row.format || '未知' }}</el-tag>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column prop="name" label="名称" min-width="160" />
-        <el-table-column label="格式" width="100">
-          <template #default="{ row }">{{ FORMAT_LABEL[row.format as FileFormat] }}</template>
+        <el-table-column label="大小" width="90">
+          <template #default="{ row }">{{ fileSizeLabel(row.size) }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="160">
+        <el-table-column label="上传时间" width="150">
+          <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
+        </el-table-column>
+        <el-table-column label="标签" min-width="140">
           <template #default="{ row }">
-            <el-select v-model="row.status" size="small" style="width: 130px" @change="onStatusChange(row)">
-              <el-option v-for="(label, key) in STATUS_LABEL" :key="key" :label="label" :value="key" />
-            </el-select>
+            <div class="row-gap">
+              <el-tag
+                v-for="t in row.tags"
+                :key="t"
+                size="small"
+                class="tag-item"
+                @click="removeTag(row, t)"
+                :title="`点击移除标签${t}`"
+              >
+                {{ t }}
+              </el-tag>
+              <el-button size="small" link type="primary" @click="addTag(row)">＋标签</el-button>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column prop="updatedAt" label="更新时间" width="150">
-          <template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column label="操作" width="170" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" link type="primary" :icon="Download" @click="download(row)">下载</el-button>
+            <el-button v-if="isEditableFormat(row.format)" size="small" link type="primary" :icon="Edit" @click="edit(row)">编辑</el-button>
+            <el-button size="small" link :icon="Open" @click="openExternal(row)">打开</el-button>
+            <el-button size="small" link :icon="Download" @click="download(row)">下载</el-button>
             <el-button size="small" link type="danger" :icon="Delete" @click="remove(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
-
-      <div class="muted" style="margin-top: 8px">
-        状态到达"已审 / 已归档"即视为该槽位完成，阶段与项目进度随之自动重算。
-      </div>
     </div>
+
+    <!-- 原位编辑（csv/docx/xlsx） -->
+    <el-dialog v-model="editorOpen" :title="`编辑 · ${editing?.name || ''}`" width="880px" top="7vh" destroy-on-close>
+      <FileEditor v-if="editing" :slot="slot" :file="editing" @saved="onEditorSaved" />
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Upload, Download, Delete, Folder } from '@element-plus/icons-vue';
+import { Upload, Download, Delete, Folder, Edit, Open } from '@element-plus/icons-vue';
 import { useAppStore } from '../core/stores/app';
 import { useProjectStore } from '../core/stores/project';
-import { STATUS_LABEL, FORMAT_LABEL, type FileFormat, type FileInstance, type Slot, type Stage } from '../core/types';
-import { slotDir } from '../core/paths';
-import { formatDateTime } from '../core/util';
+import type { FileEntry, Slot } from '../core/types';
+import { formatDateTime, fileSizeLabel, isEditableFormat } from '../core/util';
+import FileEditor from './FileEditor.vue';
 
-const props = defineProps<{ stage: Stage; slot: Slot }>();
+const props = defineProps<{ slot: Slot }>();
 const app = useAppStore();
 const store = useProjectStore();
 
-const latestVersion = computed(() =>
-  props.slot.files.reduce((m, f) => Math.max(m, f.version), 0),
-);
+const editorOpen = ref(false);
+const editing = ref<FileEntry | null>(null);
 
+function formatTagType(format: string): '' | 'success' | 'warning' | 'info' | 'danger' {
+  if (['xlsx', 'xlsm', 'xltm', 'xls', 'csv'].includes(format)) return 'success';
+  if (['zip', 'rar', '7z'].includes(format)) return 'warning';
+  if (['docx', 'doc', 'dotx', 'docm'].includes(format)) return 'info';
+  return 'info';
+}
+
+/* ---------- 上传（多文件，重名自动加序号） ---------- */
 async function upload() {
-  const stageOrder = store.stages.findIndex((s) => s.id === props.stage.id);
-  const dir = slotDir(stageOrder, props.stage.info.name, props.slot.name);
-  const res = await window.api.pickFileAndCopyIn(app.currentProjectFolder, dir, props.slot.name);
+  const res = await window.api.openDialog({ title: '选择要上传的文件（可多选）', multiSelections: true });
   if (!res) return;
-  const ext = (res.baseName.split('.').pop() || '').toLowerCase();
-  const format = ['docx', 'doc'].includes(ext) ? 'docx' : ['xlsx', 'xls'].includes(ext) ? 'xlsx' : 'other';
-  store.addFile(props.stage.id, props.slot.id, {
-    name: res.baseName.replace(/\.\w+$/, ''),
-    format,
-    status: 'drafting',
-    path: res.relativePath,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
+  const files = Array.isArray(res) ? res : [res];
+  let okCount = 0;
+  for (const src of files) {
+    const r = await window.api.copyFile(src, app.currentProjectFolder);
+    store.addFiles(props.slot.id, [
+      {
+        id: `f_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+        name: r.baseName,
+        format: r.format,
+        size: r.size,
+        createdAt: new Date().toISOString(),
+        path: r.relativePath,
+        tags: [],
+      },
+    ]);
+    okCount++;
+  }
   await store.persist();
-  ElMessage.success(`已上传：${res.baseName}（v${latestVersion.value}）`);
+  ElMessage.success(`已上传 ${okCount} 个文件`);
 }
 
-async function onStatusChange(row: FileInstance) {
-  await store.persist();
-  ElMessage.success(`状态已更新为：${STATUS_LABEL[row.status]}`);
+/* ---------- 标签 ---------- */
+async function addTag(row: FileEntry) {
+  try {
+    const { value } = await ElMessageBox.prompt('标签（如：重要 / 已核）', `为"${row.name}"添加标签`, {
+      confirmButtonText: '添加',
+      cancelButtonText: '取消',
+    });
+    if (value) store.addFileTag(props.slot.id, row.id, value);
+  } catch {
+    /* 取消 */
+  }
+}
+function removeTag(row: FileEntry, tag: string) {
+  store.removeFileTag(props.slot.id, row.id, tag);
 }
 
-async function download(row: FileInstance) {
-  const res = await window.api.downloadFile(
-    app.currentProjectFolder,
-    row.path,
-    `${row.name}_v${row.version}`,
-  );
+/* ---------- 改名 ---------- */
+async function rename(row: FileEntry) {
+  try {
+    const { value } = await ElMessageBox.prompt('文件名称', '改名', {
+      inputValue: row.name,
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+    });
+    if (value) store.updateFile(props.slot.id, row.id, { name: value.trim() });
+  } catch {
+    /* 取消 */
+  }
+}
+
+/* ---------- 打开 / 下载 / 删除 ---------- */
+async function openExternal(row: FileEntry) {
+  const abs = `${app.currentProjectFolder}/${row.path}`;
+  const res = await window.api.openFileExternal(abs);
+  if (res.error) ElMessage.error(res.error);
+}
+async function download(row: FileEntry) {
+  const res = await window.api.downloadFile(app.currentProjectFolder, row.path, `${row.name}.${row.format}`);
   if (res) ElMessage.success(`已下载到：${res.savedTo}`);
 }
-
-async function remove(row: FileInstance) {
+async function remove(row: FileEntry) {
   try {
-    await ElMessageBox.confirm(`确定删除 v${row.version} 吗？`, '删除文件', { type: 'warning' });
-    store.removeFile(props.stage.id, props.slot.id, row.id);
+    await ElMessageBox.confirm(`确定删除文件"${row.name}"吗？（项目内记录与 files/ 下物理文件都会移除）`, '删除文件', {
+      type: 'warning',
+    });
+    await window.api.deleteFile(app.currentProjectFolder, row.path);
+    store.removeFile(props.slot.id, row.id);
     await store.persist();
   } catch {
     /* 取消 */
   }
 }
+
+/* ---------- 编辑 ---------- */
+function edit(row: FileEntry) {
+  editing.value = row;
+  editorOpen.value = true;
+}
+function onEditorSaved() {
+  // 编辑后刷新文件大小/更新时间
+  const row = editing.value;
+  if (row) {
+    store.updateFile(props.slot.id, row.id, { updatedAt: new Date().toISOString() });
+  }
+  editorOpen.value = false;
+  editing.value = null;
+}
 </script>
+
+<style scoped>
+.tag-item {
+  cursor: pointer;
+}
+</style>

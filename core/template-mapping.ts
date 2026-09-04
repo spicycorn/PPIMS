@@ -1,40 +1,35 @@
 /**
- * 纯映射：项目结构 → 模板结构输入（项目架构模板功能）。
+ * 纯映射：项目插槽树 → 结构模板输入（"从现有项目另存为结构模板"）。
  * 不依赖 electron / node:path，主进程与单元测试都能安全导入。
  *
- * 语义：把项目里"阶段 + 槽位 + 各槽位已挂模板文件"捕获成模板蓝图输入，
- * 用于"从现有项目另存为模板"。槽位保留 名称/格式/必要性/需审查；
- * 已挂模板的槽位带上 templateFileName（basename）+ templateFileSrc（模板相对 posix 路径）。
+ * 语义：把项目里"阶段 + 插槽"的**树结构**捕获成结构模板输入（纯结构，无文件内容），
+ * 用于"从现有项目另存为结构模板"。保留每个插槽的名称与嵌套关系，丢弃文件。
  */
-import type { Project, ProjectTemplate, TplStageInput, TplSlotInput } from './types';
+import type { Project, StructureTemplate, TplSlotInput } from './types';
 
-/** 浏览器安全的 basename（不依赖 node:path） */
-function baseName(p: string): string {
-  return p.split(/[\\/]/).pop() || p;
-}
-
-export function projectToTemplateStages(project: Project): TplStageInput[] {
-  return project.stages.map((st) => ({
-    name: st.info.name,
-    description: st.info.description,
-    slots: st.slots.map((sl) => {
-      const slotIn: TplSlotInput = {
-        name: sl.name,
-        format: sl.format,
-        necessity: sl.necessity,
-        reviewRequired: sl.reviewRequired,
-      };
-      const linked = sl.templateId ? project.templates.find((t) => t.id === sl.templateId) : undefined;
-      if (linked) {
-        slotIn.templateFileName = baseName(linked.path);
-        slotIn.templateFileSrc = linked.path; // 相对 posix，调用方（主进程）解析为绝对源路径
-      }
-      return slotIn;
-    }),
+/** 项目插槽树 → 结构模板输入（纯结构：名称 + 嵌套，无文件）。 */
+export function projectToTemplateStructure(project: Project): TplSlotInput[] {
+  return project.slots.map((s) => ({
+    name: s.name,
+    subSlots: s.subSlots.map((sub) => ({
+      name: sub.name,
+      subSlots: sub.subSlots.map((ss) => ({
+        name: ss.name,
+        subSlots: [],
+      })),
+    })),
   }));
 }
 
-/** 统计一个项目架构模板里的槽位总数（ProjectList / TemplateManager 共用） */
-export function countTemplateSlots(tpl: ProjectTemplate): number {
-  return tpl.stages.reduce((n, st) => n + st.slots.length, 0);
+/** 统计一个结构模板里的插槽总数（顶层 + 嵌套）。 */
+export function countTemplateSlots(tpl: StructureTemplate): number {
+  let n = 0;
+  const walk = (arr: TplSlotInput[]) => {
+    for (const s of arr) {
+      n += 1;
+      walk(s.subSlots);
+    }
+  };
+  walk(tpl.structure as unknown as TplSlotInput[]);
+  return n;
 }

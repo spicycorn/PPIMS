@@ -1,12 +1,13 @@
 /**
  * 项目内文件路径规则（主进程与渲染层共用，保证一致）。
- * 目录结构（设计文档 2.5）：
+ * v1.0.0 存储模型（扁平、自包含、可整体搬移）：
  *   项目根/
- *     project.json
- *     templates/                     ← 模板
- *     <NN>_<阶段名>/<槽位名>/<文件>   ← 阶段文件夹内按槽位存文件实例
- *     日常管理/                       ← 未归类 / 日常管理
- *     _backup/                       ← 历史版本备份
+ *     project.json          ← 插槽树 + 文件清单（单一事实源）
+ *     files/                ← 所有上传的文件（扁平存放）
+ *       <文件名>             ← 按"自动编号后的显示名 + 扩展名"命名
+ *
+ * 说明：插槽树（含嵌套）与"插槽→文件"的归属关系都记录在 project.json 的
+ * FileEntry 里；files/ 只是物理存放区，扁平化便于搬移、避免多级目录重命名/移动复杂度。
  */
 
 /** 文件名净化（保留 CJK，替换非法字符） */
@@ -14,26 +15,10 @@ export function sanitize(name: string): string {
   return name.replace(/[\\/:*?"<>|]/g, '_').trim() || '未命名';
 }
 
-/** 阶段文件夹名：01_项目立项（order 从 0 起） */
-export function stageFolderName(order: number, name: string): string {
-  return `${String(order + 1).padStart(2, '0')}_${sanitize(name)}`;
+/** 文件物理存放目录（相对项目根） */
+export const FILES_DIR = 'files';
+
+/** 项目内文件的相对路径：files/<文件名> */
+export function fileRelPath(fileName: string): string {
+  return `${FILES_DIR}/${sanitize(fileName)}`;
 }
-
-/** 阶段文件夹的 POSIX 相对路径 */
-export function stageDir(order: number, name: string): string {
-  return stageFolderName(order, name);
-}
-
-/** 槽位文件夹相对路径（阶段目录 + 槽位名） */
-export function slotDir(stageOrder: number, stageName: string, slotName: string): string {
-  return `${stageDir(stageOrder, stageName)}/${sanitize(slotName)}`;
-}
-
-/** 未分类 / 日常管理目录 */
-export const DAILY_DIR = '日常管理';
-
-/** 历史版本备份目录 */
-export const BACKUP_DIR = '_backup';
-
-/** 模板目录 */
-export const TEMPLATES_DIR = 'templates';

@@ -1,33 +1,23 @@
 /**
- * 全局项目架构模板服务（主进程）。
- * - 存储位置：app.getPath('userData')/ppims-templates/<id>/
- *     template.json   ← ProjectTemplate 结构（阶段+槽位+类型+模板文件引用）
- *     templates/      ← 各槽位的模板文件（.docx/.xlsx），从源拷入，自包含
- * - 职责：列表 / 新建(编辑器) / 从项目另存 / 编辑 / 复制 / 删除 / 应用(生成新项目结构)。
- * - 应用是原子的：建项目文件夹 + 拷模板文件进新项目 templates/ + 槽位链接各自副本。
- * 设计依据：用户"全局模板库、完整带属性、新建项目时套用"的需求。
+ * 全局结构模板服务（主进程）。
+ * - 存储位置：app.getPath('userData')/ppims-templates/<id>/template.json
+ *     （纯结构：阶段 + 插槽树，无任何模板文件）
+ * - 职责：列表 / 新建 / 从项目另存 / 编辑 / 复制 / 删除 / 应用(生成新项目插槽树)。
+ * 设计依据：v1.0.0 "结构模板 = 阶段 + 插槽树（不含模板文件）"，建项时套用结构免去逐一手填。
  */
 import { app } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type {
   Project,
-  ProjectTemplate,
-  ProjectTemplateSlot,
-  ProjectTemplateStage,
   Slot,
-  Stage,
-  Template,
+  StructureTemplate,
   TplCreateInput,
-  TplStageInput,
   TplSlotInput,
 } from '../types';
-import { sanitize, TEMPLATES_DIR, stageFolderName } from '../paths';
-import { projectToTemplateStages } from '../template-mapping';
-import { ensureDir, copyFile } from './fs';
-
-/* 输入类型（TplSlotInput/TplStageInput/TplCreateInput）定义在 shared/types.ts，
-   渲染层 / preload / api.d.ts 均可安全引用（不引入 electron）。 */
+import { sanitize } from '../paths';
+import { projectToTemplateStructure } from '../template-mapping';
+import { ensureDir } from './fs';
 
 /* ---------------- 工具 ---------------- */
 
@@ -46,8 +36,6 @@ function now(): string {
   return new Date().toISOString();
 }
 
-// ensureDir / copyFile 统一从 ./fs 导入（与 ipc.ts 共用）
-
 async function isDir(p: string): Promise<boolean> {
   try {
     return (await fs.stat(p)).isDirectory();
@@ -56,7 +44,6 @@ async function isDir(p: string): Promise<boolean> {
   }
 }
 
-/** 全局模板根目录（跨所有项目根目录共享） */
 function templatesRoot(): string {
   return path.join(app.getPath('userData'), 'ppims-templates');
 }
@@ -69,13 +56,22 @@ function jsonPathOf(id: string): string {
   return path.join(dirOf(id), 'template.json');
 }
 
-function filesDirOf(id: string): string {
-  return path.join(dirOf(id), 'templates');
+/* ---------------- 结构树构建（输入 → 新插槽树） ---------------- */
+
+/** 把结构模板输入（纯结构）构建为新项目的插槽树（id 全新，files 为空）。 */
+export function slotsFromStructure(input: TplSlotInput[]): Slot[] {
+  return input.map((inSlot, i) => ({
+    id: uid('slot'),
+    name: inSlot.name.trim() || `插槽${i + 1}`,
+    files: [],
+    subSlots: slotsFromStructure(inSlot.subSlots),
+    order: i,
+  }));
 }
 
 /* ---------------- 读取 ---------------- */
 
-export async function listTemplates(): Promise<ProjectTemplate[]> {
+export async function listTemplates(): Promise<StructureTemplate[]> {
   const root = templatesRoot();
   let entries: string[] = [];
   try {
@@ -83,13 +79,13 @@ export async function listTemplates(): Promise<ProjectTemplate[]> {
   } catch {
     return [];
   }
-  const out: ProjectTemplate[] = [];
+  const out: StructureTemplate[] = [];
   for (const id of entries) {
     const dir = path.join(root, id);
     if (!(await isDir(dir))) continue;
     try {
       const raw = await fs.readFile(path.join(dir, 'template.json'), 'utf-8');
-      out.push(JSON.parse(raw) as ProjectTemplate);
+      out.push(JSON.parse(raw) as StructureTemplate);
     } catch {
       /* 损坏的模板跳过 */
     }
@@ -98,71 +94,23 @@ export async function listTemplates(): Promise<ProjectTemplate[]> {
   return out;
 }
 
-export async function getTemplate(id: string): Promise<ProjectTemplate> {
+export async function getTemplate(id: string): Promise<StructureTemplate> {
   const raw = await fs.readFile(jsonPathOf(id), 'utf-8');
-  return JSON.parse(raw) as ProjectTemplate;
+  return JSON.parse(raw) as StructureTemplate;
 }
 
 /* ---------------- 落盘（新建 / 编辑共用） ---------------- */
 
-/**
- * 落盘单个槽位（新建 / 编辑共用）：
- * - 有 templateFileSrc（新挂/换文件）→ 拷入 templates/，引用新文件
- * - 有 keepTemplateFile（编辑时保留原文件）→ 只引用 templates/ 下已有文件，不重拷
- * - 都没有 → 该槽位不带模板文件
- */
-async function buildSlot(inSlot: TplSlotInput, order: number, filesDir: string): Promise<ProjectTemplateSlot> {
-  const slot: ProjectTemplateSlot = {
-    id: uid('slot'),
-    name: inSlot.name.trim() || `槽位${order + 1}`,
-    format: inSlot.format,
-    necessity: inSlot.necessity,
-    reviewRequired: inSlot.reviewRequired,
-    order,
-  };
-  if (inSlot.templateFileSrc) {
-    const baseName = sanitize(inSlot.templateFileName || path.basename(inSlot.templateFileSrc));
-    await copyFile(inSlot.templateFileSrc, path.join(filesDir, baseName));
-    slot.templateFile = path.basename(baseName);
-    slot.templateFileName = baseName;
-  } else if (inSlot.keepTemplateFile) {
-    slot.templateFile = inSlot.keepTemplateFile;
-    slot.templateFileName = path.basename(inSlot.keepTemplateFile);
-  }
-  return slot;
-}
-
-/**
- * 把蓝图结构（含源文件路径）落成全局模板：
- * 拷模板文件进 templates/ + 写 template.json，返回创建/更新后的 ProjectTemplate。
- */
-export async function materializeTemplate(input: TplCreateInput): Promise<ProjectTemplate> {
+export async function materializeTemplate(input: TplCreateInput): Promise<StructureTemplate> {
   if (!input.name.trim()) throw new Error('模板名称不能为空');
   const id = uid('tpl');
-  const filesDir = filesDirOf(id);
-  await ensureDir(filesDir);
-
-  const stages: ProjectTemplateStage[] = [];
-  for (let si = 0; si < input.stages.length; si++) {
-    const inStage = input.stages[si];
-    const slots: ProjectTemplateSlot[] = [];
-    for (let sl = 0; sl < inStage.slots.length; sl++) {
-      slots.push(await buildSlot(inStage.slots[sl], sl, filesDir));
-    }
-    stages.push({
-      id: uid('stg'),
-      name: inStage.name.trim() || `阶段${si + 1}`,
-      description: inStage.description,
-      slots,
-      order: si,
-    });
-  }
-
-  const tpl: ProjectTemplate = {
+  const dir = dirOf(id);
+  await ensureDir(dir);
+  const tpl: StructureTemplate = {
     id,
     name: input.name.trim(),
     description: input.description?.trim() || '',
-    stages,
+    structure: input.slots.map((s) => ({ name: s.name, subSlots: s.subSlots.map((sub) => ({ name: sub.name, subSlots: [] })) })),
     createdAt: now(),
     updatedAt: now(),
   };
@@ -170,101 +118,54 @@ export async function materializeTemplate(input: TplCreateInput): Promise<Projec
   return tpl;
 }
 
-/** 从现有项目另存为全局模板：抓阶段+槽位+各槽位已挂的模板文件 */
+/** 从现有项目另存为结构模板：抓"阶段 + 插槽"树（纯结构，无文件）。 */
 export async function saveTemplateFromProject(
   projectFolder: string,
   name?: string,
   description?: string,
-): Promise<ProjectTemplate> {
+): Promise<StructureTemplate> {
   const raw = await fs.readFile(path.join(projectFolder, 'project.json'), 'utf-8');
   const project = JSON.parse(raw) as Project;
   const projectName = project.info?.name || '项目';
-
-  const stages = projectToTemplateStages(project);
-  // 把模板相对路径解析为绝对源路径（纯映射不含绝对路径，这里补）
-  for (const st of stages) {
-    for (const sl of st.slots) {
-      if (sl.templateFileSrc && !path.isAbsolute(sl.templateFileSrc)) {
-        sl.templateFileSrc = path.join(projectFolder, sl.templateFileSrc);
-      }
-    }
-  }
-
   return materializeTemplate({
-    name: name?.trim() || `模板_${projectName}`,
+    name: name?.trim() || `结构_${projectName}`,
     description: description?.trim() || `从项目「${projectName}」另存`,
-    stages,
+    slots: projectToTemplateStructure(project),
   });
 }
 
 /* ---------------- 编辑 / 复制 / 删除 ---------------- */
 
-/** 编辑模板（名称/描述/结构）：重写 template.json；结构变化时同步模板文件 */
-export async function updateTemplate(id: string, input: TplCreateInput): Promise<ProjectTemplate> {
+export async function updateTemplate(id: string, input: TplCreateInput): Promise<StructureTemplate> {
   const existing = await getTemplate(id);
-  const updated: ProjectTemplate = {
+  const updated: StructureTemplate = {
     ...existing,
     name: input.name.trim() || existing.name,
     description: input.description?.trim() || '',
-    stages: (await rebuildStages(id, input.stages, existing.updatedAt)),
+    structure: input.slots.map((s) => ({ name: s.name, subSlots: s.subSlots.map((sub) => ({ name: sub.name, subSlots: [] })) })),
     updatedAt: now(),
   };
   await fs.writeFile(jsonPathOf(id), JSON.stringify(updated, null, 2), 'utf-8');
   return updated;
 }
 
-async function rebuildStages(
-  id: string,
-  inputStages: TplStageInput[],
-  baseUpdatedAt: string,
-): Promise<ProjectTemplateStage[]> {
-  const filesDir = filesDirOf(id);
-  const stages: ProjectTemplateStage[] = [];
-  for (let si = 0; si < inputStages.length; si++) {
-    const inStage = inputStages[si];
-    const slots: ProjectTemplateSlot[] = [];
-    for (let sl = 0; sl < inStage.slots.length; sl++) {
-      slots.push(await buildSlot(inStage.slots[sl], sl, filesDir));
-    }
-    stages.push({
-      id: uid('stg'),
-      name: inStage.name.trim() || `阶段${si + 1}`,
-      description: inStage.description,
-      slots,
-      order: si,
-    });
-  }
-  void baseUpdatedAt;
-  return stages;
-}
-
-/** 复制模板：整目录深拷（template.json + templates/） */
-export async function duplicateTemplate(id: string, newName?: string): Promise<ProjectTemplate> {
-  const src = dirOf(id);
+export async function duplicateTemplate(id: string, newName?: string): Promise<StructureTemplate> {
+  const src = await getTemplate(id);
   const newId = uid('tpl');
   const dest = dirOf(newId);
   await ensureDir(dest);
-  // 拷 template.json（改写 id/name/时间）
-  const raw = await fs.readFile(jsonPathOf(id), 'utf-8');
-  const tpl = JSON.parse(raw) as ProjectTemplate;
-  const copy: ProjectTemplate = {
-    ...tpl,
+  const copy: StructureTemplate = {
+    ...src,
     id: newId,
-    name: newName?.trim() || `${tpl.name}_副本`,
+    name: newName?.trim() || `${src.name}_副本`,
+    structure: src.structure.map((s) => ({
+      name: s.name,
+      subSlots: s.subSlots.map((sub) => ({ name: sub.name, subSlots: [] })),
+    })),
     createdAt: now(),
     updatedAt: now(),
   };
   await fs.writeFile(jsonPathOf(newId), JSON.stringify(copy, null, 2), 'utf-8');
-  // 拷 templates/ 下所有文件
-  let files: string[] = [];
-  try {
-    files = await fs.readdir(path.join(src, 'templates'));
-  } catch {
-    files = [];
-  }
-  for (const f of files) {
-    await copyFile(path.join(src, 'templates', f), path.join(dest, 'templates', f));
-  }
   return copy;
 }
 
@@ -273,7 +174,7 @@ export async function deleteTemplate(id: string): Promise<{ deleted: string }> {
   return { deleted: dirOf(id) };
 }
 
-/* ---------------- 应用：生成新项目结构 ---------------- */
+/* ---------------- 应用：生成新项目插槽树 ---------------- */
 
 export interface ApplyResult {
   folder: string;
@@ -283,10 +184,7 @@ export interface ApplyResult {
 }
 
 /**
- * 用全局模板生成一个新项目：
- * 1. 建项目文件夹 + 阶段目录（同 project:create）
- * 2. 把模板各槽位模板文件拷进新项目 templates/，槽位链接各自副本
- * 3. 写 project.json
+ * 用结构模板生成一个新项目（建项目文件夹 + 写带插槽树的 project.json，无文件）。
  * 原子完成，渲染层拿回 folder 即可加载。
  */
 export async function applyTemplateToNewProject(params: {
@@ -308,69 +206,13 @@ export async function applyTemplateToNewProject(params: {
   }
 
   await ensureDir(folder);
-  await ensureDir(path.join(folder, TEMPLATES_DIR));
-
-  // 阶段目录 + 生成带模板文件的 stages
-  const newTemplates: Template[] = [];
-  const newStages: Stage[] = [];
-
-  for (let si = 0; si < tpl.stages.length; si++) {
-    const tStage = tpl.stages[si];
-    const stageFolder = path.join(folder, stageFolderName(si, tStage.name));
-    await ensureDir(stageFolder);
-
-    const slots: Slot[] = [];
-    for (let sl = 0; sl < tStage.slots.length; sl++) {
-      const tSlot = tStage.slots[sl];
-      const slot: Slot = {
-        id: uid('slot'),
-        name: tSlot.name,
-        format: tSlot.format,
-        necessity: tSlot.necessity,
-        reviewRequired: tSlot.reviewRequired,
-        files: [],
-        order: sl,
-      };
-      // 拷模板文件进新项目 templates/，并链接
-      if (tSlot.templateFile && tSlot.templateFileName) {
-        const srcAbs = path.join(filesDirOf(templateId), tSlot.templateFile);
-        const destBase = sanitize(tSlot.templateFileName);
-        const destAbs = path.join(folder, TEMPLATES_DIR, destBase);
-        await copyFile(srcAbs, destAbs);
-        const newTmpl: Template = {
-          id: uid('tmpl'),
-          name: tSlot.templateFileName,
-          format: tSlot.format,
-          path: `${TEMPLATES_DIR}/${destBase}`,
-          createdAt: now(),
-          updatedAt: now(),
-        };
-        newTemplates.push(newTmpl);
-        slot.templateId = newTmpl.id;
-      }
-      slots.push(slot);
-    }
-    newStages.push({
-      id: uid('stage'),
-      info: {
-        name: tStage.name,
-        description: tStage.description,
-        startTime: now().slice(0, 10),
-      },
-      slots,
-      weight: 1,
-      order: si,
-    });
-  }
 
   const finalProject: Project = {
     ...project,
-    stages: newStages,
-    templates: newTemplates,
+    slots: slotsFromStructure(tpl.structure),
+    updatedAt: now(),
   };
-  const { rootPath: _omit, ...rest } = finalProject;
-  void _omit;
-  await fs.writeFile(path.join(folder, 'project.json'), JSON.stringify({ ...rest, rootPath: '' }, null, 2), 'utf-8');
+  await fs.writeFile(path.join(folder, 'project.json'), JSON.stringify(finalProject, null, 2), 'utf-8');
 
   return { folder, folderName, rootPath: folder, appliedTemplateId: templateId };
 }

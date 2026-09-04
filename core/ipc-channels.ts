@@ -8,7 +8,7 @@ export const IPC = {
   OPEN_DIALOG: 'dialog:open',
   SAVE_DIALOG: 'dialog:save',
 
-  // 根配置（分类维度，设计文档 2.9）
+  // 根配置（分类维度）
   ROOT_CONFIG_GET: 'root:config:get',
   ROOT_CONFIG_SAVE: 'root:config:save',
 
@@ -21,22 +21,26 @@ export const IPC = {
   PROJECT_DELETE: 'project:delete',
   PROJECT_OPEN_FOLDER: 'project:openFolder',
 
-  // 文件
-  FILE_PICK: 'file:pick',
-  FILE_COPY_IN: 'file:copyIn',
+  // 文件（v1.0.0：扁平 files/，重名加序号）
   FILE_COPY: 'file:copy',
   FILE_DOWNLOAD: 'file:download',
+  FILE_OPEN_EXTERNAL: 'file:openExternal',
+  FILE_DELETE: 'file:delete',
   FILE_READ: 'file:read',
 
-  // Word
+  // Word（docx 系原位编辑）
   DOCX_RECOGNIZE: 'docx:recognize',
   DOCX_APPLY: 'docx:apply',
 
-  // Excel
+  // Excel（xlsx 系原位编辑）
   XLSX_RECOGNIZE: 'xlsx:recognize',
   XLSX_APPLY: 'xlsx:apply',
 
-  // 项目架构模板（全局蓝图）
+  // CSV（原位编辑）
+  CSV_RECOGNIZE: 'csv:recognize',
+  CSV_APPLY: 'csv:apply',
+
+  // 结构模板（阶段 + 插槽树）
   TPL_LIST: 'template:list',
   TPL_GET: 'template:get',
   TPL_CREATE: 'template:create',
@@ -66,9 +70,20 @@ export interface DocxRecognizeResult {
 export interface XlsxRecognizeResult {
   sheetNames: string[];
   active: string;
-  cells: Array<{ addr: string; value: string }>;
+  cells: Array<{ r: number; c: number; v: string }>;
   rows: number;
   cols: number;
+  fullText: string;
+}
+
+/** CSV 识别结果 */
+export interface CsvRecognizeResult {
+  sheetNames: string[];
+  active: string;
+  cells: Array<{ r: number; c: number; v: string }>;
+  rows: number;
+  cols: number;
+  fullText: string;
 }
 
 export interface ProjectCreateParams {

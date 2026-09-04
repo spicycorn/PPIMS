@@ -1,8 +1,12 @@
-# PPIMS · 个人项目信息管理系统
+# PPIMS · 个人项目信息管理系统（v1.0.0 个人归档版）
 
-桌面端工具，把"项目 → 阶段 → 槽位 → 文件"这条主链路管起来：**提示选项目架构模板** + 新字段表单建项、
-上传模板、按结构识别、原位编辑 Word/Excel、多版本、状态流转、进度实时重算、检索，
-以及**可扩展多维分类**（地区/专业/客户…，视图层分组/筛选/排序）。
+桌面端工具，把"项目 → 插槽树（阶段可嵌套）→ 文件"这条归档主链路管起来：
+**套用结构模板** + 新字段表单建项、多文件上传（重名自动加序号）、**动态格式识别**（任意格式）、
+文件**自定义标签**（重要/已核…）、**原位编辑** csv/Word/Excel（保真，只换文本不动样式）、
+doc/xls 查看 + 系统打开、检索，以及**可扩展多维分类**（地区/专业/客户…，视图层分组/筛选/排序）。
+
+> v1.0.0 定位从"项目完成度 + 审核流转 + 多版本"改为"**归档已完成文件、分类管理**"：
+> 删除文件状态流转 / 必要性 / 版本号 / 进度 / 固定格式枚举；新增插槽嵌套 / 文件标签 / 动态格式 / 结构模板。
 
 技术栈：Electron + Vue 3 + TypeScript + Vite + Element Plus + Pinia。
 详见《[PPIMS-设计文档.md](docs/PPIMS-设计文档.md)》（唯一事实源）。
@@ -15,13 +19,15 @@
 
 ```
 PPIMS/
-├─ core/                # 核心管理层：types / paths / classify / progress / template-mapping / util（纯逻辑）
-│   ├─ services/        #   主进程服务：docx·xlsx 引擎、模板服务、fs
-│   └─ stores/          #   状态（app / project，Pinia）
-│   └─ main / preload / ipc / ipc-channels   # Electron 主进程与桥接
+├─ core/                # 核心管理层：types / paths / classify / template-mapping / util（纯逻辑）
+│   ├─ services/        #   主进程服务：docx·xlsx·csv 引擎、结构模板服务、fs
+│   ├─ stores/          #   状态（app / project，Pinia）
+│   ├─ main / preload / ipc / ipc-channels   # Electron 主进程与桥接
 │   └─ App.vue / app-main.ts / style.css / api.d.ts   # 渲染层骨架
-├─ features/            # 功能层（Vue 3 + Element Plus UI 组件）：ProjectList / ProjectDetail / Stage / Slot / File / Search / Template…
-├─ dev/                 # 非 GitHub 相关：test（unit.test.ts）+ scripts（build-electron、gen-icon、derive-icons）
+├─ features/            # 功能层（Vue 3 + Element Plus UI 组件）：
+│                      #   ProjectList / ProjectDetail / SlotTreePanel / SlotWorkspace /
+│                      #   FilePanel / FileEditor / TemplateManager / SearchPanel / SlotStructureEditor
+├─ dev/                 # 非 GitHub 相关：test（unit.test.ts + run-standalone.ts）+ scripts（build-electron、gen-icon、derive-icons）
 ├─ public/              # 应用图标（icon.png / icon-*.png / icon.ico）
 ├─ docs/                # 设计文档（PPIMS-设计文档.md，唯一事实源）
 ├─ .github/             # CI（Build & Release，Actions 触发打包/发布）
@@ -32,9 +38,9 @@ PPIMS/
 ```
 
 > 分层原则：`core/` 是核心管理层（纯逻辑 + 主进程 + 状态 + 渲染骨架），`features/` 是功能层（UI 组件）；
-> `core/` 里的纯逻辑（types / paths / classify / progress / template-mapping / util）无 electron 依赖，
+> `core/` 里的纯逻辑（types / paths / classify / template-mapping / util / csv-engine）无 electron 依赖，
 > 渲染层与主进程都能安全 import。重复的 fs/助手统一收到 `core/services/fs.ts`、`core/util.ts`、
-> `core/template-mapping.ts`，避免各写一份。
+> `core/template-mapping.ts`，避免各写一份。**无死代码**：格式动态识别（任意格式），不做固定枚举。
 
 ---
 

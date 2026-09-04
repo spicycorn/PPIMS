@@ -3,7 +3,7 @@
  * contextIsolation 开启、nodeIntegration 关闭 —— 渲染层不直接接触 Node，安全且可控。
  */
 import { contextBridge, ipcRenderer } from 'electron';
-import type { Project, ProjectTemplate, TplCreateInput, RootConfig } from './types';
+import type { Project, StructureTemplate, TplCreateInput, RootConfig } from './types';
 
 export interface OpenDialogOpts {
   title?: string;
@@ -17,7 +17,7 @@ export interface Api {
   openDialog(opts?: OpenDialogOpts): Promise<string | string[] | null>;
   saveDialog(opts?: { title?: string; defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }): Promise<string | null>;
 
-  // 根配置（分类维度，2.9）
+  // 根配置（分类维度）
   getRootConfig(rootDir: string): Promise<RootConfig>;
   saveRootConfig(rootDir: string, config: RootConfig): Promise<{ saved: string; dimensions: RootConfig['dimensions'] }>;
 
@@ -30,28 +30,33 @@ export interface Api {
   deleteProject(projectFolder: string): Promise<{ deleted: string }>;
   openFolder(folder: string): Promise<{ error: string | null }>;
 
-  // 文件
-  pickFileAndCopyIn(projectRoot: string, destDir: string, suggestedName?: string): Promise<{ relativePath: string; baseName: string; size: number } | null>;
-  copyFile(src: string, projectRoot: string, destDir: string, baseName: string): Promise<{ relativePath: string; baseName: string; size: number }>;
+  // 文件（v1.0.0：扁平 files/，重名加序号）
+  copyFile(src: string, projectRoot: string, suggestedBaseName?: string): Promise<{ relativePath: string; baseName: string; fileName: string; format: string; size: number }>;
   downloadFile(projectRoot: string, relativePath: string, suggestedName?: string): Promise<{ savedTo: string } | null>;
+  openFileExternal(absPath: string): Promise<{ error: string | null }>;
+  deleteFile(projectRoot: string, relativePath: string): Promise<{ deleted: string }>;
   readFile(absPath: string): Promise<Uint8Array>;
 
-  // Word
+  // Word（docx 系原位编辑）
   recognizeDocx(absPath: string): Promise<any>;
   applyDocx(absPath: string, replacements: Array<{ oldText: string; newText: string }>, outputAbsPath?: string): Promise<{ written: string; applied: number; missed: string[] }>;
 
-  // Excel
+  // Excel（xlsx 系原位编辑）
   recognizeXlsx(absPath: string): Promise<any>;
   applyXlsx(absPath: string, activeSheet: string, edits: Array<{ addr: string; value: string }>, outputAbsPath?: string): Promise<{ written: string; applied: number }>;
 
-  // 项目架构模板（全局蓝图）
-  listTemplates(): Promise<ProjectTemplate[]>;
-  getTemplate(id: string): Promise<ProjectTemplate>;
-  createTemplate(input: TplCreateInput): Promise<ProjectTemplate>;
-  updateTemplate(id: string, input: TplCreateInput): Promise<ProjectTemplate>;
-  duplicateTemplate(id: string, name?: string): Promise<ProjectTemplate>;
+  // CSV（原位编辑）
+  recognizeCsv(absPath: string): Promise<any>;
+  applyCsv(absPath: string, edits: Array<{ r: number; c: number; v: string }>, outputAbsPath?: string): Promise<{ written: string; applied: number }>;
+
+  // 结构模板（阶段 + 插槽树）
+  listTemplates(): Promise<StructureTemplate[]>;
+  getTemplate(id: string): Promise<StructureTemplate>;
+  createTemplate(input: TplCreateInput): Promise<StructureTemplate>;
+  updateTemplate(id: string, input: TplCreateInput): Promise<StructureTemplate>;
+  duplicateTemplate(id: string, name?: string): Promise<StructureTemplate>;
   deleteTemplate(id: string): Promise<{ deleted: string }>;
-  saveTemplateFromProject(projectFolder: string, name?: string, description?: string): Promise<ProjectTemplate>;
+  saveTemplateFromProject(projectFolder: string, name?: string, description?: string): Promise<StructureTemplate>;
   applyTemplate(rootDir: string, project: Project, templateId: string): Promise<{ folder: string; folderName: string; rootPath: string; appliedTemplateId: string }>;
 }
 
@@ -70,12 +75,12 @@ const api: Api = {
   deleteProject: (projectFolder) => ipcRenderer.invoke('project:delete', projectFolder),
   openFolder: (folder) => ipcRenderer.invoke('project:openFolder', folder),
 
-  pickFileAndCopyIn: (projectRoot, destDir, suggestedName) =>
-    ipcRenderer.invoke('file:copyIn', { projectRoot, destDir, suggestedName }),
-  copyFile: (src, projectRoot, destDir, baseName) =>
-    ipcRenderer.invoke('file:copy', { src, projectRoot, destDir, baseName }),
+  copyFile: (src, projectRoot, suggestedBaseName) =>
+    ipcRenderer.invoke('file:copy', { src, projectRoot, suggestedBaseName }),
   downloadFile: (projectRoot, relativePath, suggestedName) =>
     ipcRenderer.invoke('file:download', { projectRoot, relativePath, suggestedName }),
+  openFileExternal: (absPath) => ipcRenderer.invoke('file:openExternal', absPath),
+  deleteFile: (projectRoot, relativePath) => ipcRenderer.invoke('file:delete', { projectRoot, relativePath }),
   readFile: (absPath) => ipcRenderer.invoke('file:read', absPath),
 
   recognizeDocx: (absPath) => ipcRenderer.invoke('docx:recognize', absPath),
@@ -86,7 +91,10 @@ const api: Api = {
   applyXlsx: (absPath, activeSheet, edits, outputAbsPath) =>
     ipcRenderer.invoke('xlsx:apply', { absPath, activeSheet, edits, outputAbsPath }),
 
-  // 项目架构模板（全局蓝图）
+  recognizeCsv: (absPath) => ipcRenderer.invoke('csv:recognize', absPath),
+  applyCsv: (absPath, edits, outputAbsPath) =>
+    ipcRenderer.invoke('csv:apply', { absPath, edits, outputAbsPath }),
+
   listTemplates: () => ipcRenderer.invoke('template:list'),
   getTemplate: (id) => ipcRenderer.invoke('template:get', id),
   createTemplate: (input) => ipcRenderer.invoke('template:create', input),

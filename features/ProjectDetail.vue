@@ -6,64 +6,32 @@
         <el-icon :size="20"><Briefcase /></el-icon>
         <div>
           <div class="proj-name">{{ project!.info.name }}</div>
-          <div class="muted mono">{{ project!.info.code }} · 立项 {{ project!.info.establishDate }}</div>
-        </div>
-        <el-divider direction="vertical" />
-        <div class="prog">
-          <div class="row-gap">
-            <span class="muted">项目进度</span>
-            <el-progress
-              :percentage="progress.project"
-              :stroke-width="10"
-              style="width: 180px"
-              :status="progress.project >= 100 ? 'success' : undefined"
-            />
-            <el-tag :type="progress.project >= 100 ? 'success' : 'primary'" size="small">
-              {{ progress.project }}%
-            </el-tag>
+          <div class="muted mono">
+            {{ project!.info.code }}
+            <template v-if="project!.info.region"> · {{ project!.info.region }}</template>
+            <template v-if="project!.info.type"> · {{ project!.info.type }}</template>
+            <template v-if="project!.info.dispatchDate"> · 下发 {{ project!.info.dispatchDate }}</template>
           </div>
         </div>
         <div style="flex: 1"></div>
-        <el-button :icon="Collection" @click="tplOpen = true">模板库</el-button>
+        <el-button :icon="Collection" @click="tplOpen = true">结构模板库</el-button>
         <el-button :icon="Search" @click="searchOpen = true">检索</el-button>
         <el-button :icon="Refresh" :loading="saving" @click="save">保存</el-button>
         <el-button :icon="FolderOpened" @click="openFolder">打开文件夹</el-button>
         <el-button :icon="Back" @click="close">返回项目列表</el-button>
       </div>
-      <!-- 缺项提示 -->
-      <div v-if="missingCount > 0" class="row-gap missing">
-        <el-alert
-          :title="`尚有 ${missingCount} 个必填/应填槽位未完成`"
-          type="warning"
-          :closable="false"
-          show-icon
-        />
-      </div>
     </el-header>
 
     <div class="app-main">
-      <!-- 左：阶段 / 槽位 / 文件 树 -->
+      <!-- 左：插槽树（顶层插槽 + 嵌套子插槽） -->
       <div class="app-sidebar">
-        <StagePanel
-          :selected-stage-id="selectedStageId"
-          :selected-slot-id="selectedSlotId"
-          @select-stage="onSelectStage"
-          @select-slot="onSelectSlot"
-        />
+        <SlotTreePanel :slots="projectStore.slots" :selected-slot-id="selectedSlotId" :root="true" @select="onSelectSlot" />
       </div>
 
-      <!-- 右：槽位工作区 -->
+      <!-- 右：插槽工作区（文件 + 子插槽） -->
       <div class="app-content">
-        <el-empty
-          v-if="!selectedSlot"
-          description="请在左侧选择一个槽位，开始挂载模板 / 填写 / 上传文件"
-        />
-        <SlotWorkspace
-          v-else
-          :stage="selectedStage!"
-          :slot="selectedSlot"
-          @files-changed="onFilesChanged"
-        />
+        <el-empty v-if="!selectedSlot" description="请在左侧选择一个插槽，上传 / 管理文件，或添加子插槽" />
+        <SlotWorkspace v-else :slot="selectedSlot" />
       </div>
     </div>
 
@@ -72,8 +40,8 @@
       <SearchPanel @open-slot="onSearchOpenSlot" />
     </el-dialog>
 
-    <!-- 模板库（全局；带当前项目，可"从当前项目另存"） -->
-    <el-dialog v-model="tplOpen" title="模板库" width="900px" top="6vh" destroy-on-close>
+    <!-- 结构模板库（全局；带当前项目，可"从当前项目另存"） -->
+    <el-dialog v-model="tplOpen" title="结构模板库" width="900px" top="6vh" destroy-on-close>
       <TemplateManager :current-folder="app.currentProjectFolder" />
     </el-dialog>
   </div>
@@ -86,55 +54,31 @@ import { Refresh, FolderOpened, Back, Briefcase, Search, Collection } from '@ele
 import { storeToRefs } from 'pinia';
 import { useAppStore } from '../core/stores/app';
 import { useProjectStore } from '../core/stores/project';
-import StagePanel from './StagePanel.vue';
+import SlotTreePanel from './SlotTreePanel.vue';
 import SlotWorkspace from './SlotWorkspace.vue';
 import SearchPanel from './SearchPanel.vue';
 import TemplateManager from './TemplateManager.vue';
-import { QUALIFIED_STATUSES } from '../core/types';
 
 const app = useAppStore();
 const projectStore = useProjectStore();
-const { project, dirty } = storeToRefs(projectStore);
+const { project, dirty, selectedSlotId } = storeToRefs(projectStore);
 
-const selectedStageId = ref('');
-const selectedSlotId = ref('');
 const searchOpen = ref(false);
 const tplOpen = ref(false);
 
-const selectedStage = computed(() => projectStore.stages.find((s) => s.id === selectedStageId.value) ?? null);
 const selectedSlot = computed(() =>
-  selectedSlotId.value ? projectStore.findSlot(selectedStageId.value, selectedSlotId.value) ?? null : null,
+  selectedSlotId.value ? projectStore.findSlot(selectedSlotId.value) ?? null : null,
 );
-
-const progress = computed(() => projectStore.progress);
-
-/** 未完成的"必填/应填"槽位数量（缺项提示） */
-const missingCount = computed(() => {
-  if (!project.value) return 0;
-  let n = 0;
-  for (const { slot } of projectStore.allSlots) {
-    if (slot.necessity === 'optional') continue;
-    const done = slot.files.some((f) => QUALIFIED_STATUSES.includes(f.status));
-    if (!done) n++;
-  }
-  return n;
-});
 
 const saving = computed(() => dirty.value);
 
-function onSelectStage(stageId: string) {
-  selectedStageId.value = stageId;
-  selectedSlotId.value = '';
+function onSelectSlot(slotId: string) {
+  projectStore.selectSlot(slotId);
 }
 
-function onSelectSlot(stageId: string, slotId: string) {
-  selectedStageId.value = stageId;
-  selectedSlotId.value = slotId;
-}
-
-function onSearchOpenSlot(stageId: string, slotId: string) {
+function onSearchOpenSlot(slotId: string) {
   searchOpen.value = false;
-  onSelectSlot(stageId, slotId);
+  projectStore.selectSlot(slotId);
 }
 
 async function save() {
@@ -156,13 +100,9 @@ function close() {
   app.closeProject();
 }
 
-function onFilesChanged() {
-  // 进度为派生值，自动重算（无需额外动作）
-}
-
-onMounted(async () => {
-  if (projectStore.stages.length) {
-    selectedStageId.value = projectStore.stages[0]?.id ?? '';
+onMounted(() => {
+  if (projectStore.slots.length) {
+    projectStore.selectSlot(projectStore.slots[0]?.id ?? '');
   }
 });
 </script>
@@ -179,11 +119,5 @@ onMounted(async () => {
 .proj-name {
   font-size: 16px;
   font-weight: 600;
-}
-.missing {
-  width: 100%;
-}
-.prog {
-  min-width: 320px;
 }
 </style>

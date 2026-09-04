@@ -1,7 +1,7 @@
 /**
- * 渲染层可见的 window.api 类型声明（与 electron/preload.ts 的 Api 对齐，但不引入 electron 类型）。
+ * 渲染层可见的 window.api 类型声明（与 preload.ts 的 Api 对齐，不引入 electron 类型）。
  */
-import type { Project, ProjectTemplate, TplCreateInput, RootConfig } from './types';
+import type { Project, StructureTemplate, TplCreateInput, RootConfig } from './types';
 
 export interface OpenDialogOpts {
   title?: string;
@@ -16,9 +16,11 @@ export interface ProjectListItem {
   info: Project['info'] | null;
 }
 
-export interface FileCopyInResult {
+export interface FileCopyResult {
   relativePath: string;
   baseName: string;
+  fileName: string;
+  format: string;
   size: number;
 }
 
@@ -37,9 +39,10 @@ export interface Api {
   deleteProject(projectFolder: string): Promise<{ deleted: string }>;
   openFolder(folder: string): Promise<{ error: string | null }>;
 
-  pickFileAndCopyIn(projectRoot: string, destDir: string, suggestedName?: string): Promise<FileCopyInResult | null>;
-  copyFile(src: string, projectRoot: string, destDir: string, baseName: string): Promise<FileCopyInResult>;
+  copyFile(src: string, projectRoot: string, suggestedBaseName?: string): Promise<FileCopyResult>;
   downloadFile(projectRoot: string, relativePath: string, suggestedName?: string): Promise<{ savedTo: string } | null>;
+  openFileExternal(absPath: string): Promise<{ error: string | null }>;
+  deleteFile(projectRoot: string, relativePath: string): Promise<{ deleted: string }>;
   readFile(absPath: string): Promise<Uint8Array>;
 
   recognizeDocx(absPath: string): Promise<any>;
@@ -57,14 +60,21 @@ export interface Api {
     outputAbsPath?: string,
   ): Promise<{ written: string; applied: number }>;
 
-  // 项目架构模板（全局蓝图）
-  listTemplates(): Promise<ProjectTemplate[]>;
-  getTemplate(id: string): Promise<ProjectTemplate>;
-  createTemplate(input: TplCreateInput): Promise<ProjectTemplate>;
-  updateTemplate(id: string, input: TplCreateInput): Promise<ProjectTemplate>;
-  duplicateTemplate(id: string, name?: string): Promise<ProjectTemplate>;
+  recognizeCsv(absPath: string): Promise<any>;
+  applyCsv(
+    absPath: string,
+    edits: Array<{ r: number; c: number; v: string }>,
+    outputAbsPath?: string,
+  ): Promise<{ written: string; applied: number }>;
+
+  // 结构模板（阶段 + 插槽树）
+  listTemplates(): Promise<StructureTemplate[]>;
+  getTemplate(id: string): Promise<StructureTemplate>;
+  createTemplate(input: TplCreateInput): Promise<StructureTemplate>;
+  updateTemplate(id: string, input: TplCreateInput): Promise<StructureTemplate>;
+  duplicateTemplate(id: string, name?: string): Promise<StructureTemplate>;
   deleteTemplate(id: string): Promise<{ deleted: string }>;
-  saveTemplateFromProject(projectFolder: string, name?: string, description?: string): Promise<ProjectTemplate>;
+  saveTemplateFromProject(projectFolder: string, name?: string, description?: string): Promise<StructureTemplate>;
   applyTemplate(rootDir: string, project: Project, templateId: string): Promise<{ folder: string; folderName: string; rootPath: string; appliedTemplateId: string }>;
 }
 

@@ -1,5 +1,6 @@
 /**
- * IPC 处理层：把渲染层请求落到 Node/Electron 主进程能力（文件、对话框、Word/Excel 引擎、导入）。
+ * IPC 处理层：把渲染层请求落到 Node/Electron 主进程能力（文件、对话框、Word/Excel/CSV 引擎、结构模板）。
+ * v1.0.0：建项只建 files/ 目录；多文件扁平复制到 files/；csv 原位编辑；doc/xls 外部打开/下载。
  * 全部基于本地 Node fs 与 jszip/xlsx，离线可用、不依赖任何云服务。
  */
 import { ipcMain, dialog, shell } from 'electron';
@@ -9,8 +10,8 @@ import os from 'node:os';
 import { IPC } from './ipc-channels';
 import { ensureDir, copyFile } from './services/fs';
 import { recognizeStructure, replaceInXml, writeDocx, readDocumentXml } from './services/docx-engine';
-import * as XLSX from 'xlsx';
 import { recognizeWorkbook, writeWorkbook } from './services/xlsx-engine';
+import { recognizeCsv, applyCsv } from './services/csv-engine';
 import {
   listTemplates,
   getTemplate,
@@ -22,29 +23,42 @@ import {
   applyTemplateToNewProject,
 } from './services/template-service';
 import type { Project, TplCreateInput, RootConfig } from './types';
-import { sanitize, stageFolderName, TEMPLATES_DIR, DAILY_DIR, BACKUP_DIR } from './paths';
+import { sanitize, FILES_DIR } from './paths';
+import { getFormat } from './util';
 import { normalizeDimensions } from './classify';
 
 /* ---------------- 工具 ---------------- */
 
-/** POSIX 相对路径（跨平台一致，保证项目文件夹可搬移） */
 function relPosix(from: string, to: string): string {
   return path.relative(from, to).split(path.sep).join('/');
 }
 
-// ensureDir / copyFile 统一从 ./services/fs 导入（与 template-service 共用）
+async function exists(p: string): Promise<boolean> {
+  try {
+    await fs.access(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
-/* ---------------- 对话框 ---------------- */
-
-interface OpenDialogOpts {
-  title?: string;
-  directory?: boolean;
-  filters?: Array<{ name: string; extensions: string[] }>;
-  multiSelections?: boolean;
+/** 落盘前去掉运行时字段（如绝对路径），保证 project.json 可搬移 */
+function stripRuntime(project: Project): Project {
+  const { rootPath: _omit, ...rest } = project;
+  void _omit;
+  return { ...rest, rootPath: '' };
 }
 
 export function registerIpc(): void {
-  // 打开对话框（选目录 / 选文件）
+  /* ---------------- 对话框 ---------------- */
+
+  interface OpenDialogOpts {
+    title?: string;
+    directory?: boolean;
+    filters?: Array<{ name: string; extensions: string[] }>;
+    multiSelections?: boolean;
+  }
+
   ipcMain.handle(
     IPC.OPEN_DIALOG,
     async (_e, opts: OpenDialogOpts = {}) => {
@@ -75,9 +89,8 @@ export function registerIpc(): void {
     },
   );
 
-  /* ---------------- 根配置（分类维度，2.9） ---------------- */
+  /* ---------------- 根配置（分类维度） ---------------- */
 
-  // 读取 <root>/ppims.json；不存在返回空维度（不预置业务）
   ipcMain.handle(IPC.ROOT_CONFIG_GET, async (_e, rootDir: string) => {
     if (!rootDir) return { dimensions: [] };
     try {
@@ -89,7 +102,6 @@ export function registerIpc(): void {
     }
   });
 
-  // 保存维度定义（先 normalize，防非法 id/重名/超量）
   ipcMain.handle(
     IPC.ROOT_CONFIG_SAVE,
     async (_e, { rootDir, config }: { rootDir: string; config: RootConfig }) => {
@@ -138,18 +150,10 @@ export function registerIpc(): void {
       if (await exists(folder)) {
         throw new Error(`项目文件夹已存在：${folderName}`);
       }
-      // 生成自包含文件夹结构（设计文档 2.5）
+      // v1.0.0：自包含文件夹 = project.json + files/（扁平存放上传文件）
       await ensureDir(folder);
-      await ensureDir(path.join(folder, TEMPLATES_DIR));
-      await ensureDir(path.join(folder, DAILY_DIR));
-      await ensureDir(path.join(folder, BACKUP_DIR));
-      for (const [i, stage] of project.stages.entries()) {
-        const stageFolder = path.join(folder, stageFolderName(i, stage.info.name));
-        await ensureDir(stageFolder);
-      }
-      // 落盘 project.json
-      const data = stripRuntime(project);
-      await fs.writeFile(path.join(folder, 'project.json'), JSON.stringify(data, null, 2), 'utf-8');
+      await ensureDir(path.join(folder, FILES_DIR));
+      await fs.writeFile(path.join(folder, 'project.json'), JSON.stringify(stripRuntime(project), null, 2), 'utf-8');
       return { folder, folderName, rootPath: folder };
     },
   );
@@ -168,7 +172,6 @@ export function registerIpc(): void {
     return { saved: jsonPath };
   });
 
-  // 轻量打补项目信息（如分类取值）：读 → 合并 info → 写回，不整对象覆盖
   ipcMain.handle(
     IPC.PROJECT_PATCH_INFO,
     async (_e, { projectFolder, info }: { projectFolder: string; info: Partial<Project['info']> }) => {
@@ -176,7 +179,6 @@ export function registerIpc(): void {
       const raw = await fs.readFile(jsonPath, 'utf-8');
       const data = JSON.parse(raw) as Project;
       data.info = { ...data.info, ...info };
-      // 规整分类取值：只剔除空值（键的合法性由渲染层按维度定义校验后传入，见 2.9 惰性清理）
       if (data.info.categories) {
         const pruned: Record<string, string> = {};
         for (const [k, v] of Object.entries(data.info.categories)) {
@@ -202,32 +204,35 @@ export function registerIpc(): void {
     return { error: err || null };
   });
 
-  /* ---------------- 文件 ---------------- */
+  /* ---------------- 文件（v1.0.0：扁平复制到 files/，重名自动加序号） ---------------- */
 
-  // 选文件 → 复制到目标目录 → 返回相对项目根的路径
-  ipcMain.handle(
-    IPC.FILE_COPY_IN,
-    async (_e, { projectRoot, destDir, suggestedName }: { projectRoot: string; destDir: string; suggestedName?: string }) => {
-      const res = await dialog.showOpenDialog({
-        title: '选择要上传的文件',
-        properties: ['openFile'],
-      });
-      if (res.canceled || !res.filePaths[0]) return null;
-      const src = res.filePaths[0];
-      const base = suggestedName ? sanitize(suggestedName) : path.basename(src);
-      const dest = path.join(projectRoot, destDir, base);
-      await copyFile(src, dest);
-      return { relativePath: relPosix(projectRoot, dest), baseName: base, size: (await fs.stat(dest)).size };
-    },
-  );
-
-  // 直接复制一个"已选定"的绝对路径文件到项目内目标目录（不弹对话框，供模板挂载/导入复用）
+  // 复制一个"已选定"的绝对路径文件到项目 files/（重名自动加序号，保证存储唯一）
   ipcMain.handle(
     IPC.FILE_COPY,
-    async (_e, { src, projectRoot, destDir, baseName }: { src: string; projectRoot: string; destDir: string; baseName: string }) => {
-      const dest = path.join(projectRoot, destDir, sanitize(baseName));
+    async (_e, { src, projectRoot, suggestedBaseName }: { src: string; projectRoot: string; suggestedBaseName?: string }) => {
+      const filesDir = path.join(projectRoot, FILES_DIR);
+      await ensureDir(filesDir);
+      const base = path.basename(src);
+      const ext = path.extname(base);
+      const stem = path.basename(base, ext);
+      const wantStem = suggestedBaseName?.trim() || stem;
+      // 重名自动加序号（对 files/ 内已有文件，保证存储唯一）
+      let candidate = `${wantStem}${ext}`;
+      let n = 2;
+      while (await exists(path.join(filesDir, candidate))) {
+        candidate = `${wantStem}_${n}${ext}`;
+        n++;
+      }
+      const dest = path.join(filesDir, candidate);
       await copyFile(src, dest);
-      return { relativePath: relPosix(projectRoot, dest), baseName: sanitize(baseName), size: (await fs.stat(dest)).size };
+      const size = (await fs.stat(dest)).size;
+      return {
+        relativePath: relPosix(projectRoot, dest),
+        baseName: path.basename(candidate, ext),
+        fileName: candidate,
+        format: getFormat(candidate),
+        size,
+      };
     },
   );
 
@@ -238,7 +243,9 @@ export function registerIpc(): void {
       const src = path.join(projectRoot, relativePath);
       const res = await dialog.showSaveDialog({
         title: '下载文件',
-        defaultPath: suggestedName ? path.join(os.homedir(), 'Downloads', suggestedName) : path.join(os.homedir(), 'Downloads', path.basename(relativePath)),
+        defaultPath: suggestedName
+          ? path.join(os.homedir(), 'Downloads', suggestedName)
+          : path.join(os.homedir(), 'Downloads', path.basename(relativePath)),
       });
       if (res.canceled || !res.filePath) return null;
       await copyFile(src, res.filePath);
@@ -246,12 +253,24 @@ export function registerIpc(): void {
     },
   );
 
+  // 用系统程序打开（doc/xls/pdf 等外部打开）
+  ipcMain.handle(IPC.FILE_OPEN_EXTERNAL, async (_e, absPath: string) => {
+    const err = await shell.openPath(absPath);
+    return { error: err || null };
+  });
+
+  // 删除项目内文件（files/ 下物理删除）
+  ipcMain.handle(IPC.FILE_DELETE, async (_e, { projectRoot, relativePath }: { projectRoot: string; relativePath: string }) => {
+    await fs.rm(path.join(projectRoot, relativePath), { force: true });
+    return { deleted: relativePath };
+  });
+
   ipcMain.handle(IPC.FILE_READ, async (_e, absPath: string) => {
     const buf = await fs.readFile(absPath);
     return buf;
   });
 
-  /* ---------------- Word ---------------- */
+  /* ---------------- Word（docx 系原位编辑） ---------------- */
 
   ipcMain.handle(IPC.DOCX_RECOGNIZE, async (_e, absPath: string) => {
     const buf = await fs.readFile(absPath);
@@ -269,7 +288,6 @@ export function registerIpc(): void {
     };
   });
 
-  // 原位替换并写回（保真）
   ipcMain.handle(
     IPC.DOCX_APPLY,
     async (_e, { absPath, replacements, outputAbsPath }: { absPath: string; replacements: Array<{ oldText: string; newText: string }>; outputAbsPath?: string }) => {
@@ -284,7 +302,7 @@ export function registerIpc(): void {
     },
   );
 
-  /* ---------------- Excel ---------------- */
+  /* ---------------- Excel（xlsx 系原位编辑） ---------------- */
 
   ipcMain.handle(IPC.XLSX_RECOGNIZE, async (_e, absPath: string) => {
     const buf = await fs.readFile(absPath);
@@ -292,12 +310,10 @@ export function registerIpc(): void {
     return {
       sheetNames: model.sheetNames,
       active: model.active,
-      cells: model.cells.map((c) => ({
-        addr: XLSX.utils.encode_cell({ r: c.r, c: c.c }),
-        value: c.v,
-      })),
+      cells: model.cells.map((c) => ({ r: c.r, c: c.c, v: c.v })),
       rows: model.rows,
       cols: model.cols,
+      fullText: '',
     };
   });
 
@@ -313,53 +329,43 @@ export function registerIpc(): void {
     },
   );
 
-  /* ---------------- 项目架构模板（全局蓝图） ---------------- */
+  /* ---------------- CSV（原位编辑） ---------------- */
 
-  ipcMain.handle(IPC.TPL_LIST, async () => {
-    return listTemplates();
+  ipcMain.handle(IPC.CSV_RECOGNIZE, async (_e, absPath: string) => {
+    const text = await fs.readFile(absPath, 'utf-8');
+    const model = recognizeCsv(text);
+    return {
+      sheetNames: model.sheetNames,
+      active: model.active,
+      cells: model.cells,
+      rows: model.rows,
+      cols: model.cols,
+      fullText: model.fullText,
+    };
   });
 
-  ipcMain.handle(IPC.TPL_GET, async (_e, id: string) => {
-    return getTemplate(id);
-  });
+  ipcMain.handle(
+    IPC.CSV_APPLY,
+    async (_e, { absPath, edits, outputAbsPath }: { absPath: string; edits: Array<{ r: number; c: number; v: string }>; outputAbsPath?: string }) => {
+      const text = await fs.readFile(absPath, 'utf-8');
+      const out = applyCsv(text, edits);
+      const dest = outputAbsPath ? outputAbsPath : absPath;
+      await ensureDir(path.dirname(dest));
+      await fs.writeFile(dest, out, 'utf-8');
+      return { written: dest, applied: edits.length };
+    },
+  );
 
-  ipcMain.handle(IPC.TPL_CREATE, async (_e, input: TplCreateInput) => {
-    return materializeTemplate(input);
-  });
+  /* ---------------- 结构模板（阶段 + 插槽树） ---------------- */
 
-  ipcMain.handle(IPC.TPL_UPDATE, async (_e, { id, input }: { id: string; input: TplCreateInput }) => {
-    return updateTemplate(id, input);
-  });
-
-  ipcMain.handle(IPC.TPL_DUPLICATE, async (_e, { id, name }: { id: string; name?: string }) => {
-    return duplicateTemplate(id, name);
-  });
-
-  ipcMain.handle(IPC.TPL_DELETE, async (_e, id: string) => {
-    return deleteTemplate(id);
-  });
-
-  ipcMain.handle(IPC.TPL_SAVE_FROM_PROJECT, async (_e, { projectFolder, name, description }: { projectFolder: string; name?: string; description?: string }) => {
-    return saveTemplateFromProject(projectFolder, name, description);
-  });
-
-  ipcMain.handle(IPC.TPL_APPLY, async (_e, { rootDir, project, templateId }: { rootDir: string; project: Project; templateId: string }) => {
-    return applyTemplateToNewProject({ rootDir, project, templateId });
-  });
-}
-
-async function exists(p: string): Promise<boolean> {
-  try {
-    await fs.access(p);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** 落盘前去掉运行时字段（如绝对路径），保证 project.json 可搬移 */
-function stripRuntime(project: Project): Project {
-  const { rootPath: _omit, ...rest } = project;
-  void _omit;
-  return { ...rest, rootPath: '' };
+  ipcMain.handle(IPC.TPL_LIST, async () => listTemplates());
+  ipcMain.handle(IPC.TPL_GET, async (_e, id: string) => getTemplate(id));
+  ipcMain.handle(IPC.TPL_CREATE, async (_e, input: TplCreateInput) => materializeTemplate(input));
+  ipcMain.handle(IPC.TPL_UPDATE, async (_e, { id, input }: { id: string; input: TplCreateInput }) => updateTemplate(id, input));
+  ipcMain.handle(IPC.TPL_DUPLICATE, async (_e, { id, name }: { id: string; name?: string }) => duplicateTemplate(id, name));
+  ipcMain.handle(IPC.TPL_DELETE, async (_e, id: string) => deleteTemplate(id));
+  ipcMain.handle(IPC.TPL_SAVE_FROM_PROJECT, async (_e, { projectFolder, name, description }: { projectFolder: string; name?: string; description?: string }) =>
+    saveTemplateFromProject(projectFolder, name, description));
+  ipcMain.handle(IPC.TPL_APPLY, async (_e, { rootDir, project, templateId }: { rootDir: string; project: Project; templateId: string }) =>
+    applyTemplateToNewProject({ rootDir, project, templateId }));
 }
