@@ -18,6 +18,7 @@
         <el-button :icon="Search" @click="searchOpen = true">检索</el-button>
         <el-button :icon="Refresh" :loading="saving" @click="save">保存</el-button>
         <el-button :icon="FolderOpened" @click="openFolder">打开文件夹</el-button>
+        <el-button :icon="Bottom" @click="minimizeToTray" title="隐藏到系统托盘（从托盘图标调出；悬浮框在屏幕右侧）">最小化</el-button>
         <el-button :icon="Back" @click="close">返回项目列表</el-button>
       </div>
     </el-header>
@@ -50,7 +51,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
-import { Refresh, FolderOpened, Back, Briefcase, Search, Collection } from '@element-plus/icons-vue';
+import { Refresh, FolderOpened, Back, Briefcase, Search, Collection, Bottom } from '@element-plus/icons-vue';
 import { storeToRefs } from 'pinia';
 import { useAppStore } from '../core/stores/app';
 import { useProjectStore } from '../core/stores/project';
@@ -93,6 +94,13 @@ async function save() {
 async function openFolder() {
   const res = await window.api.openFolder(app.currentProjectFolder);
   if (res.error) ElMessage.error(res.error);
+}
+
+/** 最小化到托盘：隐藏主窗口，从系统托盘调出（悬浮框在屏幕右侧）。 */
+function minimizeToTray() {
+  window.api.trayBoxHideMain().catch(() => {
+    ElMessage.error('无法最小化到托盘');
+  });
 }
 
 function close() {

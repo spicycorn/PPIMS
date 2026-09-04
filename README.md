@@ -1,11 +1,15 @@
-# PPIMS · 个人项目信息管理系统（v1.0.0 个人归档版）
+# PPIMS · 个人项目信息管理系统（v1.1.0）
 
 桌面端工具，把"项目 → 插槽树（阶段可嵌套）→ 文件"这条归档主链路管起来：
-**套用结构模板** + 新字段表单建项、多文件上传（重名自动加序号）、**动态格式识别**（任意格式）、
-文件**自定义标签**（重要/已核…）、**原位编辑** csv/Word/Excel（保真，只换文本不动样式）、
-doc/xls 查看 + 系统打开、检索，以及**可扩展多维分类**（地区/专业/客户…，视图层分组/筛选/排序）。
+**套用预置结构模板**（软件自带"岩土勘察项目（标准）"，开箱即用）+ 新字段表单建项、
+多文件上传（重名自动加序号）、**动态格式识别**（任意格式）、文件**自定义标签**（重要/已核…）、
+**外部预览/编辑**（系统程序打开 Word/Excel）+ 下载、检索、**托盘 + 桌面悬浮框**（缩小到菜单栏，
+右侧悬浮"未完成归档项目"）、**可扩展多维分类**（地区/专业/客户…，视图层分组/筛选/排序）。
 
-> v1.0.0 定位从"项目完成度 + 审核流转 + 多版本"改为"**归档已完成文件、分类管理**"：
+> **v1.1.0**：删除内置编辑（csv/docx/xlsx 引擎，只做外部预览/编辑）；新增预置模板（开箱即用）、
+> 托盘 + 桌面悬浮框（缩小到菜单栏 + 右侧悬浮未完成归档项目）、启动优化（图标按需导入）。
+>
+> **v1.0.0**：定位从"项目完成度 + 审核流转 + 多版本"改为"**归档已完成文件、分类管理**"：
 > 删除文件状态流转 / 必要性 / 版本号 / 进度 / 固定格式枚举；新增插槽嵌套 / 文件标签 / 动态格式 / 结构模板。
 
 技术栈：Electron + Vue 3 + TypeScript + Vite + Element Plus + Pinia。
@@ -19,28 +23,30 @@ doc/xls 查看 + 系统打开、检索，以及**可扩展多维分类**（地�
 
 ```
 PPIMS/
-├─ core/                # 核心管理层：types / paths / classify / template-mapping / util（纯逻辑）
-│   ├─ services/        #   主进程服务：docx·xlsx·csv 引擎、结构模板服务、fs
+├─ core/                # 核心管理层：types / paths / classify / template-mapping / util / presets（纯逻辑）
+│   ├─ services/        #   主进程服务：结构模板服务、fs（v1.1.0 删 csv·docx·xlsx 引擎）
 │   ├─ stores/          #   状态（app / project，Pinia）
-│   ├─ main / preload / ipc / ipc-channels   # Electron 主进程与桥接
-│   └─ App.vue / app-main.ts / style.css / api.d.ts   # 渲染层骨架
+│   ├─ main / preload / ipc / ipc-channels / tray   # Electron 主进程 + 托盘 + 桥接
+│   └─ App.vue / app-main.ts / tray-box-main.ts / style.css / api.d.ts   # 渲染层骨架
 ├─ features/            # 功能层（Vue 3 + Element Plus UI 组件）：
 │                      #   ProjectList / ProjectDetail / SlotTreePanel / SlotWorkspace /
-│                      #   FilePanel / FileEditor / TemplateManager / SearchPanel / SlotStructureEditor
+│                      #   FilePanel / TrayBox / TemplateManager / SearchPanel / SlotStructureEditor
 ├─ dev/                 # 非 GitHub 相关：test（unit.test.ts + run-standalone.ts）+ scripts（build-electron、gen-icon、derive-icons）
 ├─ public/              # 应用图标（icon.png / icon-*.png / icon.ico）
 ├─ docs/                # 设计文档（PPIMS-设计文档.md，唯一事实源）
 ├─ .github/             # CI（Build & Release，Actions 触发打包/发布）
-├─ index.html           # Vite 入口（含 favicon）
-├─ electron-builder.yml # 打包配置（图标、便携 exe、签名占位、发布）
+├─ index.html           # Vite 主应用入口（含 favicon）
+├─ tray-box.html        # Vite 桌面悬浮框入口（v1.1.0 托盘悬浮框）
+├─ electron-builder.yml # 打包配置（图标、便携 exe、代码签名、发布）
 ├─ package.json         # 依赖与脚本
 └─ *.config / tsconfig / vitest.config   # Vite / 类型 / 测试配置
 ```
 
 > 分层原则：`core/` 是核心管理层（纯逻辑 + 主进程 + 状态 + 渲染骨架），`features/` 是功能层（UI 组件）；
-> `core/` 里的纯逻辑（types / paths / classify / template-mapping / util / csv-engine）无 electron 依赖，
+> `core/` 里的纯逻辑（types / paths / classify / template-mapping / util / presets）无 electron 依赖，
 > 渲染层与主进程都能安全 import。重复的 fs/助手统一收到 `core/services/fs.ts`、`core/util.ts`、
-> `core/template-mapping.ts`，避免各写一份。**无死代码**：格式动态识别（任意格式），不做固定枚举。
+> `core/template-mapping.ts`，避免各写一份。**无死代码**：格式动态识别（任意格式），不做固定枚举；
+> v1.1.0 删除内置编辑引擎（csv/docx/xlsx），文件预览/编辑交给外部系统程序。
 
 ---
 

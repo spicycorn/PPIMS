@@ -24,5 +24,12 @@ export default defineConfig({
     target: 'es2021',
     // Element Plus / Vue 体积较大，抬高警告阈值，避免无关告警
     chunkSizeWarningLimit: 1600,
+    // 多页面：主应用 + 桌面悬浮框
+    rollupOptions: {
+      input: {
+        main: 'index.html',
+        traybox: 'tray-box.html',
+      },
+    },
   },
 });

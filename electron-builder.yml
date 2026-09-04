@@ -39,10 +39,25 @@ win:
       arch:
         - x64
   artifactName: ${productName}-${version}-win-${arch}.${ext}
-  # 代码签名占位：当前无证书则跳过签名（electron-builder 自动跳过）；
-  # 将来拿到证书后，取消下面注释并配置即可启用签名。
-  # certificateFile: buildResources/cert.pfx
-  # certificatePassword: ${env.WIN_CSC_KEY_PASSWORD}
+
+  # ============================================================
+  # 代码签名（消除 Windows SmartScreen"未知发布者"拦截）
+  # ============================================================
+  # 当前无证书 → electron-builder 自动跳过签名（SmartScreen 仍会提示，属正常）。
+  # 启用签名只需二选一：
+  #
+  # 方式 A（推荐，CI 用）：在 GitHub Secrets 配置
+  #   WIN_CSC_LINK          = .pfx 证书路径（或 base64 内容）
+  #   WIN_CSC_KEY_PASSWORD  = 证书密码
+  #   electron-builder 自动读取这两个环境变量完成签名，无需改本文件。
+  #
+  # 方式 B（本地打包用）：把证书放 buildResources/cert.pfx，取消下面注释：
+  #   certificateFile: buildResources/cert.pfx
+  #   certificatePassword: ${env.WIN_CSC_KEY_PASSWORD}
+  #
+  # 证书获取：DigiCert / GlobalSign / Sectigo 等 EV/OV 代码签名证书
+  #   （数百~数千元/年；EV 证书首次签名后 SmartScreen 信誉积累更快）。
+  # 签名后：exe 带"已验证的发布者"，SmartScreen 不再拦截（信誉积累后）。
 
 # 备用：如需改回 NSIS 安装向导，把上面 win.target 换成 `nsis` 并启用此块
 # nsis:

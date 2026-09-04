@@ -18,6 +18,7 @@ import type {
 import { sanitize } from '../paths';
 import { projectToTemplateStructure } from '../template-mapping';
 import { ensureDir } from './fs';
+import { PRESET_TEMPLATES } from '../presets';
 
 /* ---------------- 工具 ---------------- */
 
@@ -92,6 +93,27 @@ export async function listTemplates(): Promise<StructureTemplate[]> {
   }
   out.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'));
   return out;
+}
+
+/**
+ * 启动时种入预置模板（软件自带一套，开箱即用）。
+ * 幂等：按模板名去重，已存在则跳过；用户删除后下次启动会重新种入（保证"自带模板"）。
+ * @return 本次新种入的模板数量
+ */
+export async function seedPresetTemplates(): Promise<number> {
+  const existing = await listTemplates();
+  const existingNames = new Set(existing.map((t) => t.name));
+  let seeded = 0;
+  for (const preset of PRESET_TEMPLATES) {
+    if (existingNames.has(preset.name)) continue;
+    await materializeTemplate({
+      name: preset.name,
+      description: preset.description,
+      slots: preset.structure,
+    });
+    seeded++;
+  }
+  return seeded;
 }
 
 export async function getTemplate(id: string): Promise<StructureTemplate> {

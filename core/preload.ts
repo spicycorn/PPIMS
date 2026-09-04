@@ -21,6 +21,12 @@ export interface Api {
   getRootConfig(rootDir: string): Promise<RootConfig>;
   saveRootConfig(rootDir: string, config: RootConfig): Promise<{ saved: string; dimensions: RootConfig['dimensions'] }>;
 
+  persistRootDir(rootDir: string): Promise<{ saved: string }>;
+  getLastRootDir(): Promise<string>;
+
+  trayBoxShowMain(): Promise<{ shown: boolean }>;
+  trayBoxHideMain(): Promise<{ hidden: boolean }>;
+
   // 项目
   listProjects(rootDir: string): Promise<Array<{ name: string; folder: string; info: Project['info'] | null }>>;
   createProject(rootDir: string, project: Project): Promise<{ folder: string; folderName: string; rootPath: string }>;
@@ -30,24 +36,11 @@ export interface Api {
   deleteProject(projectFolder: string): Promise<{ deleted: string }>;
   openFolder(folder: string): Promise<{ error: string | null }>;
 
-  // 文件（v1.0.0：扁平 files/，重名加序号）
+  // 文件（v1.1.0：扁平 files/，只外部预览/编辑 + 下载）
   copyFile(src: string, projectRoot: string, suggestedBaseName?: string): Promise<{ relativePath: string; baseName: string; fileName: string; format: string; size: number }>;
   downloadFile(projectRoot: string, relativePath: string, suggestedName?: string): Promise<{ savedTo: string } | null>;
   openFileExternal(absPath: string): Promise<{ error: string | null }>;
   deleteFile(projectRoot: string, relativePath: string): Promise<{ deleted: string }>;
-  readFile(absPath: string): Promise<Uint8Array>;
-
-  // Word（docx 系原位编辑）
-  recognizeDocx(absPath: string): Promise<any>;
-  applyDocx(absPath: string, replacements: Array<{ oldText: string; newText: string }>, outputAbsPath?: string): Promise<{ written: string; applied: number; missed: string[] }>;
-
-  // Excel（xlsx 系原位编辑）
-  recognizeXlsx(absPath: string): Promise<any>;
-  applyXlsx(absPath: string, activeSheet: string, edits: Array<{ addr: string; value: string }>, outputAbsPath?: string): Promise<{ written: string; applied: number }>;
-
-  // CSV（原位编辑）
-  recognizeCsv(absPath: string): Promise<any>;
-  applyCsv(absPath: string, edits: Array<{ r: number; c: number; v: string }>, outputAbsPath?: string): Promise<{ written: string; applied: number }>;
 
   // 结构模板（阶段 + 插槽树）
   listTemplates(): Promise<StructureTemplate[]>;
@@ -67,6 +60,12 @@ const api: Api = {
   getRootConfig: (rootDir) => ipcRenderer.invoke('root:config:get', rootDir),
   saveRootConfig: (rootDir, config) => ipcRenderer.invoke('root:config:save', { rootDir, config }),
 
+  persistRootDir: (rootDir) => ipcRenderer.invoke('root:dir:persist', rootDir),
+  getLastRootDir: () => ipcRenderer.invoke('root:dir:getLast'),
+
+  trayBoxShowMain: () => ipcRenderer.invoke('tray-box:showMain'),
+  trayBoxHideMain: () => ipcRenderer.invoke('tray-box:hideMain'),
+
   listProjects: (rootDir) => ipcRenderer.invoke('project:list', rootDir),
   createProject: (rootDir, project) => ipcRenderer.invoke('project:create', { rootDir, project }),
   loadProject: (projectFolder) => ipcRenderer.invoke('project:load', projectFolder),
@@ -81,19 +80,6 @@ const api: Api = {
     ipcRenderer.invoke('file:download', { projectRoot, relativePath, suggestedName }),
   openFileExternal: (absPath) => ipcRenderer.invoke('file:openExternal', absPath),
   deleteFile: (projectRoot, relativePath) => ipcRenderer.invoke('file:delete', { projectRoot, relativePath }),
-  readFile: (absPath) => ipcRenderer.invoke('file:read', absPath),
-
-  recognizeDocx: (absPath) => ipcRenderer.invoke('docx:recognize', absPath),
-  applyDocx: (absPath, replacements, outputAbsPath) =>
-    ipcRenderer.invoke('docx:apply', { absPath, replacements, outputAbsPath }),
-
-  recognizeXlsx: (absPath) => ipcRenderer.invoke('xlsx:recognize', absPath),
-  applyXlsx: (absPath, activeSheet, edits, outputAbsPath) =>
-    ipcRenderer.invoke('xlsx:apply', { absPath, activeSheet, edits, outputAbsPath }),
-
-  recognizeCsv: (absPath) => ipcRenderer.invoke('csv:recognize', absPath),
-  applyCsv: (absPath, edits, outputAbsPath) =>
-    ipcRenderer.invoke('csv:apply', { absPath, edits, outputAbsPath }),
 
   listTemplates: () => ipcRenderer.invoke('template:list'),
   getTemplate: (id) => ipcRenderer.invoke('template:get', id),

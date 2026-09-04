@@ -19,6 +19,8 @@ export const useAppStore = defineStore('app', {
     setRootDir(dir: string) {
       this.rootDir = dir;
       this.view = 'list';
+      // 持久化最近根目录（供悬浮框等独立窗口读取）
+      void window.api.persistRootDir(dir).catch(() => {});
       // 换根目录后重新加载该根下的维度定义
       void this.loadDimensions();
     },

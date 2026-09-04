@@ -7,6 +7,8 @@
 import { app, BrowserWindow, shell } from 'electron';
 import path from 'node:path';
 import { registerIpc } from './ipc';
+import { seedPresetTemplates } from './services/template-service';
+import { setupTray } from './tray';
 
 // 资源根目录：打包后为 app.asar 内，开发态为项目根
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
@@ -15,7 +17,7 @@ const DEV_URL = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
 
 let mainWindow: BrowserWindow | null = null;
 
-function createWindow(): void {
+function createWindow(): BrowserWindow {
   mainWindow = new BrowserWindow({
     title: 'PPIMS · 个人项目信息管理系统',
     // 应用图标：可爱小人整理文件夹（public/ 下；Windows 窗口标题栏/任务栏生效）
@@ -49,6 +51,8 @@ function createWindow(): void {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  return mainWindow;
 }
 
 // 单实例锁：避免多开导致 project.json 写冲突
@@ -63,12 +67,20 @@ if (!gotLock) {
     }
   });
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
+    // 启动时种入预置模板（软件自带一套，开箱即用，幂等）
+    void seedPresetTemplates().catch(() => {});
+
     registerIpc();
-    createWindow();
+    const win = createWindow();
+    // 托盘 + 桌面悬浮框（缩小到菜单栏功能）
+    setupTray(win);
 
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+      if (BrowserWindow.getAllWindows().length === 0) {
+        const w = createWindow();
+        setupTray(w);
+      }
     });
   });
 

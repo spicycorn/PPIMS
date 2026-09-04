@@ -80,7 +80,7 @@
             <!-- ① 提示选模板（建项第一步） -->
             <el-divider content-position="left">① 套用结构模板（可选，一键生成"阶段 + 插槽"树）</el-divider>
             <el-form-item label="套用模板">
-              <el-select v-model="selectedTemplateId" clearable placeholder="选一个结构模板作为骨架（不选则建空项目）" style="width: 100%">
+              <el-select v-model="selectedTemplateId" clearable placeholder="结构模板（默认套用「岩土勘察项目（标准）」；清空则建空项目）" style="width: 100%">
                 <el-option v-for="t in templateList" :key="t.id" :label="t.name" :value="t.id">
                   <span>{{ t.name }}</span>
                   <span class="muted" style="float: right; font-size: 12px">{{ countTemplateSlots(t) }} 个插槽</span>
@@ -274,6 +274,11 @@ const categoryValues = reactive<CategoryValues>({});
 async function loadTemplates() {
   try {
     templateList.value = await window.api.listTemplates();
+    // 默认选中预置模板（软件自带一套，开箱即用；建项默认套用）
+    if (!selectedTemplateId.value && templateList.value.length) {
+      const preset = templateList.value.find((t) => t.name === '岩土勘察项目（标准）') ?? templateList.value[0];
+      selectedTemplateId.value = preset.id;
+    }
   } catch {
     templateList.value = [];
   }

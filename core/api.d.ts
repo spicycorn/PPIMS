@@ -31,6 +31,14 @@ export interface Api {
   getRootConfig(rootDir: string): Promise<RootConfig>;
   saveRootConfig(rootDir: string, config: RootConfig): Promise<{ saved: string; dimensions: RootConfig['dimensions'] }>;
 
+  persistRootDir(rootDir: string): Promise<{ saved: string }>;
+  getLastRootDir(): Promise<string>;
+
+  /** 从悬浮框请求显示主窗口（点击未归档项目时）。 */
+  trayBoxShowMain(): Promise<{ shown: boolean }>;
+  /** 主窗口"最小化到托盘"（隐藏主窗口，从系统托盘调出）。 */
+  trayBoxHideMain(): Promise<{ hidden: boolean }>;
+
   listProjects(rootDir: string): Promise<ProjectListItem[]>;
   createProject(rootDir: string, project: Project): Promise<{ folder: string; folderName: string; rootPath: string }>;
   loadProject(projectFolder: string): Promise<{ project: Project; rootPath: string }>;
@@ -43,29 +51,6 @@ export interface Api {
   downloadFile(projectRoot: string, relativePath: string, suggestedName?: string): Promise<{ savedTo: string } | null>;
   openFileExternal(absPath: string): Promise<{ error: string | null }>;
   deleteFile(projectRoot: string, relativePath: string): Promise<{ deleted: string }>;
-  readFile(absPath: string): Promise<Uint8Array>;
-
-  recognizeDocx(absPath: string): Promise<any>;
-  applyDocx(
-    absPath: string,
-    replacements: Array<{ oldText: string; newText: string }>,
-    outputAbsPath?: string,
-  ): Promise<{ written: string; applied: number; missed: string[] }>;
-
-  recognizeXlsx(absPath: string): Promise<any>;
-  applyXlsx(
-    absPath: string,
-    activeSheet: string,
-    edits: Array<{ addr: string; value: string }>,
-    outputAbsPath?: string,
-  ): Promise<{ written: string; applied: number }>;
-
-  recognizeCsv(absPath: string): Promise<any>;
-  applyCsv(
-    absPath: string,
-    edits: Array<{ r: number; c: number; v: string }>,
-    outputAbsPath?: string,
-  ): Promise<{ written: string; applied: number }>;
 
   // 结构模板（阶段 + 插槽树）
   listTemplates(): Promise<StructureTemplate[]>;

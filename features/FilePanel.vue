@@ -43,40 +43,29 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="170" fixed="right">
+        <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="isEditableFormat(row.format)" size="small" link type="primary" :icon="Edit" @click="edit(row)">编辑</el-button>
-            <el-button size="small" link :icon="Open" @click="openExternal(row)">打开</el-button>
+            <el-button size="small" link :icon="Open" title="用系统程序打开（预览 / 编辑）" @click="openExternal(row)">打开</el-button>
             <el-button size="small" link :icon="Download" @click="download(row)">下载</el-button>
             <el-button size="small" link type="danger" :icon="Delete" @click="remove(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
     </div>
-
-    <!-- 原位编辑（csv/docx/xlsx） -->
-    <el-dialog v-model="editorOpen" :title="`编辑 · ${editing?.name || ''}`" width="880px" top="7vh" destroy-on-close>
-      <FileEditor v-if="editing" :slot="slot" :file="editing" @saved="onEditorSaved" />
-    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Upload, Download, Delete, Folder, Edit, Open } from '@element-plus/icons-vue';
+import { Upload, Download, Delete, Folder, Open } from '@element-plus/icons-vue';
 import { useAppStore } from '../core/stores/app';
 import { useProjectStore } from '../core/stores/project';
 import type { FileEntry, Slot } from '../core/types';
-import { formatDateTime, fileSizeLabel, isEditableFormat } from '../core/util';
-import FileEditor from './FileEditor.vue';
+import { formatDateTime, fileSizeLabel } from '../core/util';
 
 const props = defineProps<{ slot: Slot }>();
 const app = useAppStore();
 const store = useProjectStore();
-
-const editorOpen = ref(false);
-const editing = ref<FileEntry | null>(null);
 
 function formatTagType(format: string): '' | 'success' | 'warning' | 'info' | 'danger' {
   if (['xlsx', 'xlsm', 'xltm', 'xls', 'csv'].includes(format)) return 'success';
@@ -161,21 +150,6 @@ async function remove(row: FileEntry) {
   } catch {
     /* 取消 */
   }
-}
-
-/* ---------- 编辑 ---------- */
-function edit(row: FileEntry) {
-  editing.value = row;
-  editorOpen.value = true;
-}
-function onEditorSaved() {
-  // 编辑后刷新文件大小/更新时间
-  const row = editing.value;
-  if (row) {
-    store.updateFile(props.slot.id, row.id, { updatedAt: new Date().toISOString() });
-  }
-  editorOpen.value = false;
-  editing.value = null;
 }
 </script>
 

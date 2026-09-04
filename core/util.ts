@@ -67,29 +67,3 @@ export function fileSizeLabel(size: number): string {
   } while (v >= 1024 && u < units.length - 1);
   return `${v.toFixed(v >= 100 ? 0 : 1)} ${units[u]}`;
 }
-
-/* ============================================================
- * 编辑/预览能力判定（"用哪个引擎"，非格式枚举）
- * ============================================================ */
-
-/** 可"应用内原位编辑"的格式（csv + zip 系 Word/Excel）。 */
-const EDITABLE = new Set(['csv', 'docx', 'docm', 'dotx', 'xlsx', 'xlsm', 'xltm']);
-/** 老式二进制 Word/Excel：应用内查看 + 编辑后存为现代格式（docx/xlsx）。 */
-const DOC_XLS = new Set(['doc', 'xls']);
-
-/** 该格式能否应用内原位编辑（csv/docx/docm/dotx/xlsx/xlsm/xltm）。 */
-export function isEditableFormat(format: string): boolean {
-  return EDITABLE.has(format);
-}
-
-/** 该格式是否为老式 doc/xls（查看 + 存为现代格式）。 */
-export function isDocXlsFormat(format: string): boolean {
-  return DOC_XLS.has(format);
-}
-
-/** 编辑 csv/xlsx 系（表格）还是 docx 系（文档）。用于选引擎。 */
-export function editEngine(format: string): 'sheet' | 'docx' | null {
-  if (format === 'csv' || format === 'xlsx' || format === 'xlsm' || format === 'xltm') return 'sheet';
-  if (format === 'docx' || format === 'docm' || format === 'dotx') return 'docx';
-  return null;
-}

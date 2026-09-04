@@ -3,15 +3,12 @@
  * v1.0.0：建项只建 files/ 目录；多文件扁平复制到 files/；csv 原位编辑；doc/xls 外部打开/下载。
  * 全部基于本地 Node fs 与 jszip/xlsx，离线可用、不依赖任何云服务。
  */
-import { ipcMain, dialog, shell } from 'electron';
+import { ipcMain, dialog, shell, app } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { IPC } from './ipc-channels';
 import { ensureDir, copyFile } from './services/fs';
-import { recognizeStructure, replaceInXml, writeDocx, readDocumentXml } from './services/docx-engine';
-import { recognizeWorkbook, writeWorkbook } from './services/xlsx-engine';
-import { recognizeCsv, applyCsv } from './services/csv-engine';
 import {
   listTemplates,
   getTemplate,
@@ -113,6 +110,29 @@ export function registerIpc(): void {
       return { saved: p, dimensions };
     },
   );
+
+  /* ---------------- 最近根目录（持久化，供悬浮框读取） ---------------- */
+
+  function lastRootPath(): string {
+    return path.join(app.getPath('userData'), 'ppims-config.json');
+  }
+
+  ipcMain.handle(IPC.ROOT_DIR_PERSIST, async (_e, rootDir: string) => {
+    const p = lastRootPath();
+    await ensureDir(path.dirname(p));
+    await fs.writeFile(p, JSON.stringify({ lastRootDir: rootDir || '' }, null, 2), 'utf-8');
+    return { saved: p };
+  });
+
+  ipcMain.handle(IPC.ROOT_DIR_GET_LAST, async () => {
+    try {
+      const raw = await fs.readFile(lastRootPath(), 'utf-8');
+      const data = JSON.parse(raw) as { lastRootDir?: string };
+      return data.lastRootDir || '';
+    } catch {
+      return '';
+    }
+  });
 
   /* ---------------- 项目 ---------------- */
 
@@ -264,97 +284,6 @@ export function registerIpc(): void {
     await fs.rm(path.join(projectRoot, relativePath), { force: true });
     return { deleted: relativePath };
   });
-
-  ipcMain.handle(IPC.FILE_READ, async (_e, absPath: string) => {
-    const buf = await fs.readFile(absPath);
-    return buf;
-  });
-
-  /* ---------------- Word（docx 系原位编辑） ---------------- */
-
-  ipcMain.handle(IPC.DOCX_RECOGNIZE, async (_e, absPath: string) => {
-    const buf = await fs.readFile(absPath);
-    const structure = await recognizeStructure(buf);
-    return {
-      paragraphs: structure.paragraphs.map((p) => ({
-        index: p.index,
-        text: p.text,
-        isHeading: p.isHeading,
-        headingLevel: p.headingLevel,
-        inTable: p.inTable,
-      })),
-      tables: structure.tables,
-      fullText: structure.fullText,
-    };
-  });
-
-  ipcMain.handle(
-    IPC.DOCX_APPLY,
-    async (_e, { absPath, replacements, outputAbsPath }: { absPath: string; replacements: Array<{ oldText: string; newText: string }>; outputAbsPath?: string }) => {
-      const buf = await fs.readFile(absPath);
-      const xml = await readDocumentXml(buf);
-      const { xml: newXml, applied, missed } = replaceInXml(xml, replacements);
-      const out = await writeDocx(buf, newXml);
-      const dest = outputAbsPath ? outputAbsPath : absPath;
-      await ensureDir(path.dirname(dest));
-      await fs.writeFile(dest, out);
-      return { written: dest, applied, missed };
-    },
-  );
-
-  /* ---------------- Excel（xlsx 系原位编辑） ---------------- */
-
-  ipcMain.handle(IPC.XLSX_RECOGNIZE, async (_e, absPath: string) => {
-    const buf = await fs.readFile(absPath);
-    const model = await recognizeWorkbook(buf);
-    return {
-      sheetNames: model.sheetNames,
-      active: model.active,
-      cells: model.cells.map((c) => ({ r: c.r, c: c.c, v: c.v })),
-      rows: model.rows,
-      cols: model.cols,
-      fullText: '',
-    };
-  });
-
-  ipcMain.handle(
-    IPC.XLSX_APPLY,
-    async (_e, { absPath, activeSheet, edits, outputAbsPath }: { absPath: string; activeSheet: string; edits: Array<{ addr: string; value: string }>; outputAbsPath?: string }) => {
-      const buf = await fs.readFile(absPath);
-      const out = await writeWorkbook(buf, activeSheet, edits);
-      const dest = outputAbsPath ? outputAbsPath : absPath;
-      await ensureDir(path.dirname(dest));
-      await fs.writeFile(dest, out);
-      return { written: dest, applied: edits.length };
-    },
-  );
-
-  /* ---------------- CSV（原位编辑） ---------------- */
-
-  ipcMain.handle(IPC.CSV_RECOGNIZE, async (_e, absPath: string) => {
-    const text = await fs.readFile(absPath, 'utf-8');
-    const model = recognizeCsv(text);
-    return {
-      sheetNames: model.sheetNames,
-      active: model.active,
-      cells: model.cells,
-      rows: model.rows,
-      cols: model.cols,
-      fullText: model.fullText,
-    };
-  });
-
-  ipcMain.handle(
-    IPC.CSV_APPLY,
-    async (_e, { absPath, edits, outputAbsPath }: { absPath: string; edits: Array<{ r: number; c: number; v: string }>; outputAbsPath?: string }) => {
-      const text = await fs.readFile(absPath, 'utf-8');
-      const out = applyCsv(text, edits);
-      const dest = outputAbsPath ? outputAbsPath : absPath;
-      await ensureDir(path.dirname(dest));
-      await fs.writeFile(dest, out, 'utf-8');
-      return { written: dest, applied: edits.length };
-    },
-  );
 
   /* ---------------- 结构模板（阶段 + 插槽树） ---------------- */
 
