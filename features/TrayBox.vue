@@ -148,6 +148,17 @@ function onDragEnd() {
 </script>
 
 <style scoped>
+/* 平滑展示：窗口 showInactive 后，渲染层做 fade-in（不闪屏） */
+@keyframes tb-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 .tb {
   width: 100%;
   height: 100%;
@@ -159,6 +170,7 @@ function onDragEnd() {
   flex-direction: column;
   overflow: hidden;
   font-size: 13px;
+  animation: tb-fade-in 0.22s ease;
 }
 .tb-head {
   display: flex;

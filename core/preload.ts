@@ -25,7 +25,6 @@ export interface Api {
   getLastRootDir(): Promise<string>;
 
   trayBoxShowMain(): Promise<{ shown: boolean }>;
-  trayBoxHideMain(): Promise<{ hidden: boolean }>;
 
   // 项目
   listProjects(rootDir: string): Promise<Array<{ name: string; folder: string; info: Project['info'] | null }>>;
@@ -64,7 +63,6 @@ const api: Api = {
   getLastRootDir: () => ipcRenderer.invoke('root:dir:getLast'),
 
   trayBoxShowMain: () => ipcRenderer.invoke('tray-box:showMain'),
-  trayBoxHideMain: () => ipcRenderer.invoke('tray-box:hideMain'),
 
   listProjects: (rootDir) => ipcRenderer.invoke('project:list', rootDir),
   createProject: (rootDir, project) => ipcRenderer.invoke('project:create', { rootDir, project }),

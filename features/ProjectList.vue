@@ -108,15 +108,7 @@
               <el-input v-model="form.stage" placeholder="初始阶段（选填）" />
             </el-form-item>
             <el-form-item label="类型">
-              <el-select v-model="form.type" clearable filterable allow-create placeholder="选填（如 勘测/设计/施工…）">
-                <el-option label="勘测" value="勘测" />
-                <el-option label="设计" value="设计" />
-                <el-option label="施工" value="施工" />
-                <el-option label="岩土" value="岩土" />
-                <el-option label="测绘" value="测绘" />
-                <el-option label="水文" value="水文" />
-                <el-option label="物探" value="物探" />
-              </el-select>
+              <el-input v-model="form.type" placeholder="选填 · 专业方向（如 岩土 / 物探 / 测量 / 水文 / 测绘…）" />
             </el-form-item>
             <el-form-item label="编号" prop="code">
               <el-input v-model="form.code" placeholder="如：60-F14742S" />

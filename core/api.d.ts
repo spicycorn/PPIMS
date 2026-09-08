@@ -36,8 +36,6 @@ export interface Api {
 
   /** 从悬浮框请求显示主窗口（点击未归档项目时）。 */
   trayBoxShowMain(): Promise<{ shown: boolean }>;
-  /** 主窗口"最小化到托盘"（隐藏主窗口，从系统托盘调出）。 */
-  trayBoxHideMain(): Promise<{ hidden: boolean }>;
 
   listProjects(rootDir: string): Promise<ProjectListItem[]>;
   createProject(rootDir: string, project: Project): Promise<{ folder: string; folderName: string; rootPath: string }>;
