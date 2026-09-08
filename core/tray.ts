@@ -6,8 +6,9 @@
  * - 桌面悬浮框：无边框透明小窗，固定屏幕"右上角"，罗列"未完成归档项目"。
  *   "不覆盖任何应用"：alwaysOnTop=false + focusable=false，它在 Z 序底层（被应用遮挡时只在桌面可见）。
  *   平滑展示：先 showInactive（不抢焦点），渲染层做 CSS fade-in 动画。
+ * - 互斥（v1.2.1）：主窗口与悬浮框不能同时存在——主窗口"显示/聚焦"（任何方式）→ 悬浮框隐藏。
  * - 关闭行为：
- *   - "点关闭缩小到菜单栏"开启时，点主窗口"×"→ 隐藏到托盘（不退出）。
+ *   - "点关闭缩小到菜单栏"开启时，点主窗口"×"→ 隐藏到托盘（不退出）+ 显示悬浮框。
  *   - "点关闭缩小到菜单栏"关闭时，点主窗口"×"→ 退出（彻底关闭，含后台）。
  *   - 托盘菜单"退出 PPIMS"→ 始终彻底退出（含后台）。
  *
@@ -185,8 +186,9 @@ export function setupTray(win: BrowserWindow): void {
   if (tray) return;
   mainWin = win;
 
-  // 悬浮框请求"显示主窗口"（点击未归档项目时）
+  // 悬浮框请求"显示主窗口"（点击未归档项目时）——互斥：主窗口出现，悬浮窗同时消失
   ipcMain.handle('tray-box:showMain', () => {
+    hideTrayBox(); // 显式隐藏悬浮窗（主窗口出现即互斥）
     if (mainWin) {
       if (mainWin.isMinimized()) mainWin.restore();
       mainWin.show();
@@ -194,6 +196,10 @@ export function setupTray(win: BrowserWindow): void {
     }
     return { shown: true };
   });
+
+  // 互斥：主窗口"显示/聚焦"（任何方式——托盘点击·showMain·其他）→ 隐藏悬浮窗
+  win.on('show', () => hideTrayBox());
+  win.on('focus', () => hideTrayBox());
 
   // 主窗口"关闭"事件：根据 closeToTray 设置决定隐藏到托盘还是退出
   win.on('close', (e) => {

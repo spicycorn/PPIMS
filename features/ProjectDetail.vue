@@ -83,8 +83,12 @@ function onSearchOpenSlot(slotId: string) {
 
 async function save() {
   try {
-    await projectStore.persist();
-    ElMessage.success('已保存到 project.json');
+    const saved = await projectStore.persist();
+    if (saved) {
+      ElMessage.success('已保存到 project.json');
+    } else {
+      ElMessage.error(projectStore.error || '保存失败');
+    }
   } catch (e) {
     ElMessage.error(`保存失败：${(e as Error).message}`);
   }

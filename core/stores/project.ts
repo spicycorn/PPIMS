@@ -81,14 +81,27 @@ export const useProjectStore = defineStore('project', {
       }
     },
 
-    /** 即时持久化到 project.json */
-    async persist(): Promise<void> {
+    /**
+     * 即时持久化到 project.json。
+     * 返回是否真保存了：false = 前置条件不满足（无项目/无项目文件夹），并写入 error（不静默假成功）。
+     * 保存失败（IO 异常）仍 throw，由调用方 catch。
+     */
+    async persist(): Promise<boolean> {
       const app = useAppStore();
-      if (!this.project || !app.currentProjectFolder) return;
+      if (!this.project) {
+        this.error = '无法保存：没有打开的项目';
+        return false;
+      }
+      if (!app.currentProjectFolder) {
+        this.error = '无法保存：缺少项目文件夹（请先打开项目）';
+        return false;
+      }
       this.project.updatedAt = now();
       try {
         await window.api.saveProject(app.currentProjectFolder, this.project);
         this.dirty = false;
+        this.error = '';
+        return true;
       } catch (e) {
         this.error = (e as Error).message;
         throw e;

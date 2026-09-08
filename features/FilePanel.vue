@@ -95,8 +95,12 @@ async function upload() {
     ]);
     okCount++;
   }
-  await store.persist();
-  ElMessage.success(`已上传 ${okCount} 个文件`);
+  const saved = await store.persist();
+  if (saved) {
+    ElMessage.success(`已上传 ${okCount} 个文件`);
+  } else {
+    ElMessage.warning(`已上传 ${okCount} 个文件，但项目状态未保存：${store.error || '未知原因'}`);
+  }
 }
 
 /* ---------- 标签 ---------- */

@@ -1,7 +1,7 @@
 {
   "name": "ppims",
-  "version": "1.2.0",
-  "description": "个人项目信息管理系统 · 本地项目资料归档管理工具（v1.2.0：托盘设置菜单 + 右上角悬浮 + 彻底退出 + 类型自由输入）",
+  "version": "1.2.1",
+  "description": "个人项目信息管理系统 · 本地项目资料归档管理工具（v1.2.1：修复保存假成功 + 模板建项结构 + 悬浮窗与主窗口互斥）",
   "author": "spicycorn",
   "private": true,
   "license": "MIT",

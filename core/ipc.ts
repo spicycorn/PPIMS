@@ -23,6 +23,7 @@ import type { Project, TplCreateInput, RootConfig } from './types';
 import { sanitize, FILES_DIR } from './paths';
 import { getFormat } from './util';
 import { normalizeDimensions } from './classify';
+import { stripRuntime } from './project-util';
 
 /* ---------------- 工具 ---------------- */
 
@@ -37,13 +38,6 @@ async function exists(p: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-/** 落盘前去掉运行时字段（如绝对路径），保证 project.json 可搬移 */
-function stripRuntime(project: Project): Project {
-  const { rootPath: _omit, ...rest } = project;
-  void _omit;
-  return { ...rest, rootPath: '' };
 }
 
 export function registerIpc(): void {

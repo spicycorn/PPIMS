@@ -15,10 +15,11 @@ import type {
   TplCreateInput,
   TplSlotInput,
 } from '../types';
-import { sanitize } from '../paths';
+import { sanitize, FILES_DIR } from '../paths';
 import { projectToTemplateStructure } from '../template-mapping';
 import { ensureDir } from './fs';
 import { PRESET_TEMPLATES } from '../presets';
+import { stripRuntime } from '../project-util';
 
 /* ---------------- 工具 ---------------- */
 
@@ -227,14 +228,17 @@ export async function applyTemplateToNewProject(params: {
     if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
   }
 
+  // 与 IPC PROJECT_CREATE 对齐：自包含文件夹 = project.json + files/（扁平存放上传文件）
   await ensureDir(folder);
+  await ensureDir(path.join(folder, FILES_DIR));
 
   const finalProject: Project = {
     ...project,
     slots: slotsFromStructure(tpl.structure),
     updatedAt: now(),
   };
-  await fs.writeFile(path.join(folder, 'project.json'), JSON.stringify(finalProject, null, 2), 'utf-8');
+  // 落盘前去掉运行时字段（rootPath 绝对路径），保证可搬移（与 IPC 建项一致）
+  await fs.writeFile(path.join(folder, 'project.json'), JSON.stringify(stripRuntime(finalProject), null, 2), 'utf-8');
 
   return { folder, folderName, rootPath: folder, appliedTemplateId: templateId };
 }
