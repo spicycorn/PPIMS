@@ -10,6 +10,7 @@ import {
   type Slot,
 } from '../types';
 import { useAppStore } from './app';
+import { sanitize } from '../paths';
 
 function uid(prefix = 'id'): string {
   try {
@@ -85,6 +86,9 @@ export const useProjectStore = defineStore('project', {
      * 即时持久化到 project.json。
      * 返回是否真保存了：false = 前置条件不满足（无项目/无项目文件夹），并写入 error（不静默假成功）。
      * 保存失败（IO 异常）仍 throw，由调用方 catch。
+     *
+     * 关键：this.project 是 Vue reactive Proxy，直接过 Electron IPC 会触发
+     * "An object could not be cloned"。先 JSON 深克隆成纯对象再过 IPC（结构化克隆安全）。
      */
     async persist(): Promise<boolean> {
       const app = useAppStore();
@@ -97,8 +101,10 @@ export const useProjectStore = defineStore('project', {
         return false;
       }
       this.project.updatedAt = now();
+      // 深克隆 reactive → 纯对象（修 "could not be cloned"）
+      const plain = JSON.parse(JSON.stringify(this.project)) as Project;
       try {
-        await window.api.saveProject(app.currentProjectFolder, this.project);
+        await window.api.saveProject(app.currentProjectFolder, plain);
         this.dirty = false;
         this.error = '';
         return true;
@@ -129,9 +135,10 @@ export const useProjectStore = defineStore('project', {
 
     /* ---------- 插槽树 CRUD ---------- */
 
-    /** 新建插槽。parentSlotId 为空 = 顶层（阶段）；否则挂到该插槽下（子插槽）。 */
-    addSlot(name: string, parentSlotId?: string): Slot {
+    /** 新建插槽。parentSlotId 为空 = 顶层（阶段）；否则挂到该插槽下（子插槽）。实时建对应文件夹。 */
+    async addSlot(name: string, parentSlotId?: string): Promise<Slot> {
       if (!this.project) throw new Error('没有打开的项目');
+      const app = useAppStore();
       const s: Slot = {
         id: uid('slot'),
         name,
@@ -148,12 +155,23 @@ export const useProjectStore = defineStore('project', {
       } else {
         this.project.slots.push(s);
       }
+      // 实时：建插槽文件夹（嵌套镜像）
+      if (app.currentProjectFolder) {
+        await window.api.slotMkdir(app.currentProjectFolder, this.slotFolderRelPath(s.id));
+      }
       this.touch();
       return s;
     },
 
-    removeSlot(slotId: string) {
+    /** 删除插槽（含子插槽）。实时递归删除其文件夹（含全部文件）。 */
+    async removeSlot(slotId: string): Promise<void> {
       if (!this.project) return;
+      const app = useAppStore();
+      const folderRel = this.slotFolderRelPath(slotId);
+      // 实时：递归删插槽文件夹（含子插槽 + 全部文件）
+      if (app.currentProjectFolder && folderRel) {
+        await window.api.slotRm(app.currentProjectFolder, folderRel);
+      }
       const remove = (arr: Slot[]): boolean => {
         const i = arr.findIndex((s) => s.id === slotId);
         if (i >= 0) {
@@ -167,12 +185,34 @@ export const useProjectStore = defineStore('project', {
       this.touch();
     },
 
-    renameSlot(slotId: string, name: string) {
+    /** 改名插槽。实时：磁盘文件夹改名（含子内容）+ 子树全部文件 path 前缀更新。 */
+    async renameSlot(slotId: string, name: string): Promise<void> {
       const s = this.findSlot(slotId);
-      if (s) {
-        s.name = name;
-        this.touch();
+      if (!s) return;
+      const app = useAppStore();
+      const oldName = s.name;
+      if (oldName === name) return; // 无变化
+      const oldFolderRel = this.slotFolderRelPath(slotId);
+      s.name = name; // 先改树（slotFolderRelPath 依赖名链）
+      const newFolderRel = this.slotFolderRelPath(slotId);
+      // 实时：磁盘文件夹改名（含全部子内容）
+      if (app.currentProjectFolder && oldFolderRel && newFolderRel && oldFolderRel !== newFolderRel) {
+        await window.api.slotRename(app.currentProjectFolder, oldFolderRel, newFolderRel);
       }
+      // 级联更新子树所有文件的 path 前缀（oldFolder/xxx → newFolder/xxx）
+      if (oldFolderRel && newFolderRel && oldFolderRel !== newFolderRel) {
+        const walk = (node: Slot) => {
+          const prefixOld = `${oldFolderRel}/`;
+          for (const f of node.files) {
+            if (f.path && f.path.startsWith(prefixOld)) {
+              f.path = newFolderRel + f.path.slice(oldFolderRel.length);
+            }
+          }
+          for (const sub of node.subSlots) walk(sub);
+        };
+        walk(s);
+      }
+      this.touch();
     },
 
     /** 在上/下兄弟间移动（dir: -1 上移，1 下移）。 */
@@ -197,10 +237,17 @@ export const useProjectStore = defineStore('project', {
       this.touch();
     },
 
-    removeFile(slotId: string, fileId: string) {
+    /** 删除文件。实时：物理删除插槽文件夹内的文件。 */
+    async removeFile(slotId: string, fileId: string): Promise<void> {
       const s = this.findSlot(slotId);
       if (!s) return;
-      s.files = s.files.filter((f) => f.id !== fileId);
+      const app = useAppStore();
+      const f = s.files.find((x) => x.id === fileId);
+      // 实时：物理删除文件
+      if (app.currentProjectFolder && f?.path) {
+        await window.api.deleteFile(app.currentProjectFolder, f.path);
+      }
+      s.files = s.files.filter((x) => x.id !== fileId);
       this.touch();
     },
 
@@ -248,6 +295,26 @@ export const useProjectStore = defineStore('project', {
 
     findFile(slotId: string, fileId: string): FileEntry | undefined {
       return this.findSlot(slotId)?.files.find((f) => f.id === fileId);
+    },
+
+    /** 返回插槽的名链（根 → 该插槽），用于算插槽文件夹路径。如 ["阶段1","勘测大纲"]。 */
+    slotNameChain(slotId: string): string[] {
+      if (!this.project) return [];
+      const find = (arr: Slot[], trail: string[]): string[] | null => {
+        for (const s of arr) {
+          const next = [...trail, s.name];
+          if (s.id === slotId) return next;
+          const hit = find(s.subSlots, next);
+          if (hit) return hit;
+        }
+        return null;
+      };
+      return find(this.project.slots, []) ?? [];
+    },
+
+    /** 插槽文件夹相对路径（如 "阶段1/勘测大纲"）。 */
+    slotFolderRelPath(slotId: string): string {
+      return this.slotNameChain(slotId).map(sanitize).join('/');
     },
 
     /** 返回该插槽所在的兄弟数组（顶层或某父插槽的 subSlots）。 */

@@ -45,10 +45,15 @@ export interface Api {
   deleteProject(projectFolder: string): Promise<{ deleted: string }>;
   openFolder(folder: string): Promise<{ error: string | null }>;
 
-  copyFile(src: string, projectRoot: string, suggestedBaseName?: string): Promise<FileCopyResult>;
+  copyFile(src: string, projectRoot: string, slotFolder?: string, suggestedBaseName?: string): Promise<FileCopyResult>;
   downloadFile(projectRoot: string, relativePath: string, suggestedName?: string): Promise<{ savedTo: string } | null>;
   openFileExternal(absPath: string): Promise<{ error: string | null }>;
   deleteFile(projectRoot: string, relativePath: string): Promise<{ deleted: string }>;
+
+  // 插槽文件夹（v1.2.2 嵌套镜像：加插槽建文件夹 / 删插槽删文件夹 / 改名移文件夹）
+  slotMkdir(projectRoot: string, slotFolder: string): Promise<{ created: string }>;
+  slotRm(projectRoot: string, slotFolder: string): Promise<{ deleted: string }>;
+  slotRename(projectRoot: string, oldFolder: string, newFolder: string): Promise<{ renamed: string }>;
 
   // 结构模板（阶段 + 插槽树）
   listTemplates(): Promise<StructureTemplate[]>;

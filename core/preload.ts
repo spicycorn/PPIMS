@@ -35,11 +35,16 @@ export interface Api {
   deleteProject(projectFolder: string): Promise<{ deleted: string }>;
   openFolder(folder: string): Promise<{ error: string | null }>;
 
-  // 文件（v1.1.0：扁平 files/，只外部预览/编辑 + 下载）
-  copyFile(src: string, projectRoot: string, suggestedBaseName?: string): Promise<{ relativePath: string; baseName: string; fileName: string; format: string; size: number }>;
+  // 文件（v1.2.2：嵌套镜像到插槽文件夹，只外部预览/编辑 + 下载）
+  copyFile(src: string, projectRoot: string, slotFolder?: string, suggestedBaseName?: string): Promise<{ relativePath: string; baseName: string; fileName: string; format: string; size: number }>;
   downloadFile(projectRoot: string, relativePath: string, suggestedName?: string): Promise<{ savedTo: string } | null>;
   openFileExternal(absPath: string): Promise<{ error: string | null }>;
   deleteFile(projectRoot: string, relativePath: string): Promise<{ deleted: string }>;
+
+  // 插槽文件夹（v1.2.2 嵌套镜像）
+  slotMkdir(projectRoot: string, slotFolder: string): Promise<{ created: string }>;
+  slotRm(projectRoot: string, slotFolder: string): Promise<{ deleted: string }>;
+  slotRename(projectRoot: string, oldFolder: string, newFolder: string): Promise<{ renamed: string }>;
 
   // 结构模板（阶段 + 插槽树）
   listTemplates(): Promise<StructureTemplate[]>;
@@ -72,12 +77,16 @@ const api: Api = {
   deleteProject: (projectFolder) => ipcRenderer.invoke('project:delete', projectFolder),
   openFolder: (folder) => ipcRenderer.invoke('project:openFolder', folder),
 
-  copyFile: (src, projectRoot, suggestedBaseName) =>
-    ipcRenderer.invoke('file:copy', { src, projectRoot, suggestedBaseName }),
+  copyFile: (src, projectRoot, slotFolder, suggestedBaseName) =>
+    ipcRenderer.invoke('file:copy', { src, projectRoot, slotFolder, suggestedBaseName }),
   downloadFile: (projectRoot, relativePath, suggestedName) =>
     ipcRenderer.invoke('file:download', { projectRoot, relativePath, suggestedName }),
   openFileExternal: (absPath) => ipcRenderer.invoke('file:openExternal', absPath),
   deleteFile: (projectRoot, relativePath) => ipcRenderer.invoke('file:delete', { projectRoot, relativePath }),
+
+  slotMkdir: (projectRoot, slotFolder) => ipcRenderer.invoke('slot:mkdir', { projectRoot, slotFolder }),
+  slotRm: (projectRoot, slotFolder) => ipcRenderer.invoke('slot:rm', { projectRoot, slotFolder }),
+  slotRename: (projectRoot, oldFolder, newFolder) => ipcRenderer.invoke('slot:rename', { projectRoot, oldFolder, newFolder }),
 
   listTemplates: () => ipcRenderer.invoke('template:list'),
   getTemplate: (id) => ipcRenderer.invoke('template:get', id),

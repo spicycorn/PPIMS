@@ -1,7 +1,8 @@
 /**
- * IPC 处理层：把渲染层请求落到 Node/Electron 主进程能力（文件、对话框、Word/Excel/CSV 引擎、结构模板）。
- * v1.0.0：建项只建 files/ 目录；多文件扁平复制到 files/；csv 原位编辑；doc/xls 外部打开/下载。
- * 全部基于本地 Node fs 与 jszip/xlsx，离线可用、不依赖任何云服务。
+ * IPC 处理层：把渲染层请求落到 Node/Electron 主进程能力（文件、对话框、结构模板）。
+ * v1.2.2：嵌套镜像——建项/加载建插槽文件夹（每个插槽一个文件夹）；文件复制到所属插槽文件夹；
+ *   加插槽建文件夹 / 删插槽删文件夹 / 改名移文件夹；加载旧项目（扁平 files/）自动迁移到嵌套。
+ * 全部基于本地 Node fs，离线可用、不依赖任何云服务。
  */
 import { ipcMain, dialog, shell, app } from 'electron';
 import { promises as fs } from 'node:fs';
@@ -19,11 +20,11 @@ import {
   deleteTemplate,
   applyTemplateToNewProject,
 } from './services/template-service';
-import type { Project, TplCreateInput, RootConfig } from './types';
-import { sanitize, FILES_DIR } from './paths';
+import type { Project, Slot, TplCreateInput, RootConfig } from './types';
+import { sanitize } from './paths';
 import { getFormat } from './util';
 import { normalizeDimensions } from './classify';
-import { stripRuntime } from './project-util';
+import { stripRuntime, ensureSlotFolders } from './project-util';
 
 /* ---------------- 工具 ---------------- */
 
@@ -38,6 +39,61 @@ async function exists(p: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * 迁移旧扁平结构（文件在 files/ 下）到嵌套镜像（文件在各自插槽文件夹下）。
+ * idempotent：仅处理 path 以 "files/" 开头的文件（旧扁平路径）；已嵌套的跳过。
+ * 物理移动文件 + 更新 FileEntry.path；files/ 清空后删除。返回是否发生迁移。
+ */
+async function migrateFlatToNested(projectRoot: string, project: Project): Promise<boolean> {
+  let migrated = false;
+  const walk = async (slots: Slot[], trail: string[]): Promise<void> => {
+    for (const s of slots) {
+      const chain = [...trail, s.name];
+      const folderRel = chain.map(sanitize).join('/');
+      for (const f of s.files) {
+        if (f.path && f.path.startsWith('files/')) {
+          const fileName = path.basename(f.path);
+          const src = path.join(projectRoot, 'files', fileName);
+          const destDir = path.join(projectRoot, folderRel);
+          await ensureDir(destDir);
+          let candidate = fileName;
+          let n = 2;
+          while (await exists(path.join(destDir, candidate))) {
+            const ext = path.extname(fileName);
+            const stem = path.basename(fileName, ext);
+            candidate = `${stem}_${n}${ext}`;
+            n++;
+          }
+          const dest = path.join(destDir, candidate);
+          if (src !== dest) {
+            try {
+              if (await exists(src)) await fs.rename(src, dest);
+            } catch {
+              /* 物理文件不存在：保留记录，仅修正 path 指向 */
+            }
+          }
+          f.path = folderRel ? `${folderRel}/${candidate}` : candidate;
+          migrated = true;
+        }
+      }
+      await walk(s.subSlots, chain);
+    }
+  };
+  await walk(project.slots ?? [], []);
+  if (migrated) {
+    try {
+      const filesDir = path.join(projectRoot, 'files');
+      if (await exists(filesDir)) {
+        const entries = await fs.readdir(filesDir);
+        if (entries.length === 0) await fs.rm(filesDir, { recursive: true, force: true });
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return migrated;
 }
 
 export function registerIpc(): void {
@@ -164,9 +220,9 @@ export function registerIpc(): void {
       if (await exists(folder)) {
         throw new Error(`项目文件夹已存在：${folderName}`);
       }
-      // v1.0.0：自包含文件夹 = project.json + files/（扁平存放上传文件）
+      // v1.2.2：自包含文件夹 = project.json + 插槽树镜像（每个插槽一个文件夹，嵌套）
       await ensureDir(folder);
-      await ensureDir(path.join(folder, FILES_DIR));
+      await ensureSlotFolders(folder, project.slots ?? []);
       await fs.writeFile(path.join(folder, 'project.json'), JSON.stringify(stripRuntime(project), null, 2), 'utf-8');
       return { folder, folderName, rootPath: folder };
     },
@@ -176,6 +232,12 @@ export function registerIpc(): void {
     const jsonPath = path.join(projectFolder, 'project.json');
     const raw = await fs.readFile(jsonPath, 'utf-8');
     const data = JSON.parse(raw) as Project;
+    // v1.2.2：旧项目（扁平 files/）→ 嵌套镜像；并补齐缺失的插槽文件夹（自愈合）
+    const migrated = await migrateFlatToNested(projectFolder, data);
+    await ensureSlotFolders(projectFolder, data.slots ?? []);
+    if (migrated) {
+      await fs.writeFile(jsonPath, JSON.stringify(stripRuntime(data), null, 2), 'utf-8');
+    }
     return { project: data, rootPath: projectFolder };
   });
 
@@ -218,26 +280,26 @@ export function registerIpc(): void {
     return { error: err || null };
   });
 
-  /* ---------------- 文件（v1.0.0：扁平复制到 files/，重名自动加序号） ---------------- */
+  /* ---------------- 文件（v1.2.2：复制到所属插槽文件夹，重名自动加序号） ---------------- */
 
-  // 复制一个"已选定"的绝对路径文件到项目 files/（重名自动加序号，保证存储唯一）
+  // 复制一个"已选定"的绝对路径文件到指定插槽文件夹（slotFolder 相对路径；重名自动加序号，保证存储唯一）
   ipcMain.handle(
     IPC.FILE_COPY,
-    async (_e, { src, projectRoot, suggestedBaseName }: { src: string; projectRoot: string; suggestedBaseName?: string }) => {
-      const filesDir = path.join(projectRoot, FILES_DIR);
-      await ensureDir(filesDir);
+    async (_e, { src, projectRoot, slotFolder, suggestedBaseName }: { src: string; projectRoot: string; slotFolder?: string; suggestedBaseName?: string }) => {
+      const destDir = slotFolder ? path.join(projectRoot, slotFolder) : projectRoot;
+      await ensureDir(destDir);
       const base = path.basename(src);
       const ext = path.extname(base);
       const stem = path.basename(base, ext);
       const wantStem = suggestedBaseName?.trim() || stem;
-      // 重名自动加序号（对 files/ 内已有文件，保证存储唯一）
+      // 重名自动加序号（对该插槽文件夹内已有文件，保证存储唯一）
       let candidate = `${wantStem}${ext}`;
       let n = 2;
-      while (await exists(path.join(filesDir, candidate))) {
+      while (await exists(path.join(destDir, candidate))) {
         candidate = `${wantStem}_${n}${ext}`;
         n++;
       }
-      const dest = path.join(filesDir, candidate);
+      const dest = path.join(destDir, candidate);
       await copyFile(src, dest);
       const size = (await fs.stat(dest)).size;
       return {
@@ -273,11 +335,41 @@ export function registerIpc(): void {
     return { error: err || null };
   });
 
-  // 删除项目内文件（files/ 下物理删除）
+  // 删除项目内文件（插槽文件夹下物理删除）
   ipcMain.handle(IPC.FILE_DELETE, async (_e, { projectRoot, relativePath }: { projectRoot: string; relativePath: string }) => {
     await fs.rm(path.join(projectRoot, relativePath), { force: true });
     return { deleted: relativePath };
   });
+
+  /* ---------------- 插槽文件夹（v1.2.2 嵌套镜像：加插槽建文件夹 / 删插槽删文件夹 / 改名移文件夹） ---------------- */
+
+  // 建插槽文件夹（相对项目根；含多级，ensureDir 逐级建）
+  ipcMain.handle(IPC.SLOT_MKDIR, async (_e, { projectRoot, slotFolder }: { projectRoot: string; slotFolder: string }) => {
+    const dir = slotFolder ? path.join(projectRoot, slotFolder) : projectRoot;
+    await ensureDir(dir);
+    return { created: dir };
+  });
+
+  // 删插槽文件夹（递归：含子插槽文件夹 + 全部文件）
+  ipcMain.handle(IPC.SLOT_RM, async (_e, { projectRoot, slotFolder }: { projectRoot: string; slotFolder: string }) => {
+    const dir = slotFolder ? path.join(projectRoot, slotFolder) : projectRoot;
+    await fs.rm(dir, { recursive: true, force: true });
+    return { deleted: dir };
+  });
+
+  // 移/改插槽文件夹名（含全部子内容；目标已存在则先删）
+  ipcMain.handle(
+    IPC.SLOT_RENAME,
+    async (_e, { projectRoot, oldFolder, newFolder }: { projectRoot: string; oldFolder: string; newFolder: string }) => {
+      const from = oldFolder ? path.join(projectRoot, oldFolder) : projectRoot;
+      const to = newFolder ? path.join(projectRoot, newFolder) : projectRoot;
+      if (from !== to) {
+        if (await exists(to)) await fs.rm(to, { recursive: true, force: true });
+        await fs.rename(from, to);
+      }
+      return { renamed: to };
+    },
+  );
 
   /* ---------------- 结构模板（阶段 + 插槽树） ---------------- */
 

@@ -1,7 +1,7 @@
 {
   "name": "ppims",
-  "version": "1.2.1",
-  "description": "个人项目信息管理系统 · 本地项目资料归档管理工具（v1.2.1：修复保存假成功 + 模板建项结构 + 悬浮窗与主窗口互斥）",
+  "version": "1.2.2",
+  "description": "个人项目信息管理系统 · 本地项目资料归档管理工具（v1.2.2：修复保存 clone 错误 + 插槽树镜像为磁盘目录 + 实时保存 + 删文件/删插槽）",
   "author": "spicycorn",
   "private": true,
   "license": "MIT",

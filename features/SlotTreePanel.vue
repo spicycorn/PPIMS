@@ -45,7 +45,7 @@
 </template>
 
 <script setup lang="ts">
-import { ElMessageBox } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Top, Bottom, Edit, Delete, Folder, Files } from '@element-plus/icons-vue';
 import { useProjectStore } from '../core/stores/project';
 import type { Slot } from '../core/types';
@@ -60,7 +60,12 @@ const emit = defineEmits<{ (e: 'select', slotId: string): void }>();
 
 const store = useProjectStore();
 
-/* ---------- 插槽 CRUD ---------- */
+/** MessageBox 取消/关闭时 reject 的是字符串 'cancel'/'close'；真实错误是 Error。 */
+function isCancel(e: unknown): boolean {
+  return typeof e === 'string' && (e === 'cancel' || e === 'close');
+}
+
+/* ---------- 插槽 CRUD（实时落盘：建/删/改文件夹） ---------- */
 async function addTop() {
   try {
     const { value } = await ElMessageBox.prompt('插槽名称（顶层 = 阶段，如：项目立项）', '新增插槽', {
@@ -68,11 +73,11 @@ async function addTop() {
       cancelButtonText: '取消',
     });
     if (value) {
-      const s = store.addSlot(value.trim());
+      const s = await store.addSlot(value.trim());
       emit('select', s.id);
     }
-  } catch {
-    /* 取消 */
+  } catch (e) {
+    if (!isCancel(e)) ElMessage.error(`新建插槽失败：${(e as Error).message}`);
   }
 }
 async function addSub(parent: Slot) {
@@ -82,11 +87,11 @@ async function addSub(parent: Slot) {
       cancelButtonText: '取消',
     });
     if (value) {
-      const s = store.addSlot(value.trim(), parent.id);
+      const s = await store.addSlot(value.trim(), parent.id);
       emit('select', s.id);
     }
-  } catch {
-    /* 取消 */
+  } catch (e) {
+    if (!isCancel(e)) ElMessage.error(`新建子插槽失败：${(e as Error).message}`);
   }
 }
 async function rename(slot: Slot) {
@@ -96,19 +101,21 @@ async function rename(slot: Slot) {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
     });
-    if (value) store.renameSlot(slot.id, value.trim());
-  } catch {
-    /* 取消 */
+    if (value) await store.renameSlot(slot.id, value.trim());
+  } catch (e) {
+    if (!isCancel(e)) ElMessage.error(`改名失败：${(e as Error).message}`);
   }
 }
 async function remove(slot: Slot) {
   try {
-    await ElMessageBox.confirm(`确定删除插槽"${slot.name}"及其子插槽吗？（已上传的文件记录会移除，物理文件保留）`, '删除插槽', {
-      type: 'warning',
-    });
-    store.removeSlot(slot.id);
-  } catch {
-    /* 取消 */
+    await ElMessageBox.confirm(
+      `确定删除插槽"${slot.name}"及其子插槽吗？\n\n该插槽的文件夹（含子插槽与全部文件）将被物理删除。`,
+      '删除插槽',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+    );
+    await store.removeSlot(slot.id);
+  } catch (e) {
+    if (!isCancel(e)) ElMessage.error(`删除插槽失败：${(e as Error).message}`);
   }
 }
 function move(slotId: string, dir: -1 | 1) {

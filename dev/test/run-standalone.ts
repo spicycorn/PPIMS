@@ -10,6 +10,7 @@ import assert from 'node:assert';
 import { projectToTemplateStructure, countTemplateSlots } from '../../core/template-mapping.ts';
 import { getFormat, autoNumberName, fileSizeLabel } from '../../core/util.ts';
 import { normalizeDimensions, pruneCategoryValues, distinctValues, sanitizeProjectCategories, defaultRootConfig } from '../../core/classify.ts';
+import { sanitize, slotFolderRelPath, fileRelPath } from '../../core/paths.ts';
 import type { Project } from '../../core/types.ts';
 
 let passed = 0;
@@ -89,6 +90,33 @@ async function main() {
   await test('sanitizeProjectCategories + defaultRootConfig', () => {
     assert.deepStrictEqual(sanitizeProjectCategories({ name: 'P', code: 'C', categories: { dim_a: '华北' } }, [{ id: 'dim_a', name: '地区' }]).categories, { dim_a: '华北' });
     assert.deepStrictEqual(defaultRootConfig().dimensions, []);
+  });
+
+  console.log('\n四、paths（v1.2.2 嵌套镜像路径）');
+  await test('sanitize 替换非法字符、保留 CJK', () => {
+    assert.equal(sanitize('阶段/1'), '阶段_1');
+    assert.equal(sanitize('a\\b:c'), 'a_b_c');
+    assert.equal(sanitize('  '), '未命名');
+    assert.equal(sanitize('岩土'), '岩土');
+  });
+  await test('slotFolderRelPath 按名链拼接', () => {
+    assert.equal(slotFolderRelPath(['勘察大纲']), '勘察大纲');
+    assert.equal(slotFolderRelPath(['勘察大纲', '子项']), '勘察大纲/子项');
+    assert.equal(slotFolderRelPath(['阶段/1', '子']), '阶段_1/子');
+    assert.equal(slotFolderRelPath([]), '');
+  });
+  await test('fileRelPath = 插槽文件夹/文件名', () => {
+    assert.equal(fileRelPath(['勘察大纲'], '任务书.docx'), '勘察大纲/任务书.docx');
+    assert.equal(fileRelPath(['勘察大纲', '子项'], '报告.pdf'), '勘察大纲/子项/报告.pdf');
+    assert.equal(fileRelPath([], '裸文件.txt'), '裸文件.txt');
+  });
+  await test('改名级联：path 前缀替换（模拟 renameSlot repath）', () => {
+    const oldFolder = '勘察大纲';
+    const newFolder = '勘察报告';
+    const repath = (p: string) => (p.startsWith(oldFolder + '/') ? newFolder + p.slice(oldFolder.length) : p);
+    assert.equal(repath('勘察大纲/任务书.docx'), '勘察报告/任务书.docx');
+    assert.equal(repath('勘察大纲/子项/报告.pdf'), '勘察报告/子项/报告.pdf');
+    assert.equal(repath('其他/文件.txt'), '其他/文件.txt'); // 非该插槽前缀，不动
   });
 
   console.log(`\n========== 结果：${passed} 通过 / ${failed} 失败 ==========\n`);

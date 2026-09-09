@@ -25,11 +25,16 @@ export const IPC = {
   PROJECT_DELETE: 'project:delete',
   PROJECT_OPEN_FOLDER: 'project:openFolder',
 
-  // 文件（v1.1.0：扁平 files/，只外部预览/编辑 + 下载）
+  // 文件（v1.2.2：嵌套镜像到插槽文件夹，只外部预览/编辑 + 下载）
   FILE_COPY: 'file:copy',
   FILE_DOWNLOAD: 'file:download',
   FILE_OPEN_EXTERNAL: 'file:openExternal',
   FILE_DELETE: 'file:delete',
+
+  // 插槽文件夹（v1.2.2 嵌套镜像：加插槽建文件夹 / 删插槽删文件夹 / 改名移文件夹）
+  SLOT_MKDIR: 'slot:mkdir',
+  SLOT_RM: 'slot:rm',
+  SLOT_RENAME: 'slot:rename',
 
   // 结构模板（阶段 + 插槽树）
   TPL_LIST: 'template:list',

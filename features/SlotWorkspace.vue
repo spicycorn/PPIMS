@@ -53,12 +53,13 @@ async function addSub() {
       cancelButtonText: '取消',
     });
     if (value) {
-      const s = store.addSlot(value.trim(), props.slot.id);
+      const s = await store.addSlot(value.trim(), props.slot.id);
       store.selectSlot(s.id);
       ElMessage.success(`已创建子插槽"${s.name}"`);
     }
-  } catch {
-    /* 取消 */
+  } catch (e) {
+    if (typeof e === 'string' && (e === 'cancel' || e === 'close')) return; // 用户取消
+    ElMessage.error(`创建子插槽失败：${(e as Error).message}`);
   }
 }
 

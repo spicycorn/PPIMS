@@ -74,14 +74,15 @@ function formatTagType(format: string): '' | 'success' | 'warning' | 'info' | 'd
   return 'info';
 }
 
-/* ---------- 上传（多文件，重名自动加序号） ---------- */
+/* ---------- 上传（多文件，重名自动加序号，存入当前插槽文件夹） ---------- */
 async function upload() {
   const res = await window.api.openDialog({ title: '选择要上传的文件（可多选）', multiSelections: true });
   if (!res) return;
   const files = Array.isArray(res) ? res : [res];
+  const slotFolder = store.slotFolderRelPath(props.slot.id);
   let okCount = 0;
   for (const src of files) {
-    const r = await window.api.copyFile(src, app.currentProjectFolder);
+    const r = await window.api.copyFile(src, app.currentProjectFolder, slotFolder);
     store.addFiles(props.slot.id, [
       {
         id: `f_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
@@ -97,7 +98,7 @@ async function upload() {
   }
   const saved = await store.persist();
   if (saved) {
-    ElMessage.success(`已上传 ${okCount} 个文件`);
+    ElMessage.success(`已上传 ${okCount} 个文件到「${props.slot.name}」`);
   } else {
     ElMessage.warning(`已上传 ${okCount} 个文件，但项目状态未保存：${store.error || '未知原因'}`);
   }
@@ -145,14 +146,16 @@ async function download(row: FileEntry) {
 }
 async function remove(row: FileEntry) {
   try {
-    await ElMessageBox.confirm(`确定删除文件"${row.name}"吗？（项目内记录与 files/ 下物理文件都会移除）`, '删除文件', {
+    await ElMessageBox.confirm(`确定删除文件"${row.name}"吗？（项目内记录与插槽文件夹内的物理文件都会移除）`, '删除文件', {
       type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
     });
-    await window.api.deleteFile(app.currentProjectFolder, row.path);
-    store.removeFile(props.slot.id, row.id);
-    await store.persist();
-  } catch {
-    /* 取消 */
+    await store.removeFile(props.slot.id, row.id); // 统一：物理删除 + 移出树 + 落盘
+    ElMessage.success(`已删除文件"${row.name}"`);
+  } catch (e) {
+    if (typeof e === 'string' && (e === 'cancel' || e === 'close')) return; // 用户取消
+    ElMessage.error(`删除文件失败：${(e as Error).message}`);
   }
 }
 </script>
