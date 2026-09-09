@@ -5,7 +5,10 @@
       <div class="row-gap">
         <el-icon :size="20"><Briefcase /></el-icon>
         <div>
-          <div class="proj-name">{{ project!.info.name }}</div>
+          <div class="proj-name">
+            {{ project!.info.name }}
+            <el-tag v-if="project!.info.archived" size="small" type="success" effect="light">已归档</el-tag>
+          </div>
           <div class="muted mono">
             {{ project!.info.code }}
             <template v-if="project!.info.region"> · {{ project!.info.region }}</template>
@@ -14,6 +17,13 @@
           </div>
         </div>
         <div style="flex: 1"></div>
+        <el-button
+          :type="project!.info.archived ? 'success' : 'default'"
+          :icon="project!.info.archived ? CircleCheck : Checked"
+          @click="toggleArchived"
+        >
+          {{ project!.info.archived ? '取消归档' : '标记已归档' }}
+        </el-button>
         <el-button :icon="Collection" @click="tplOpen = true">结构模板库</el-button>
         <el-button :icon="Search" @click="searchOpen = true">检索</el-button>
         <el-button :icon="Refresh" :loading="saving" @click="save">保存</el-button>
@@ -50,7 +60,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
-import { Refresh, FolderOpened, Back, Briefcase, Search, Collection } from '@element-plus/icons-vue';
+import { Refresh, FolderOpened, Back, Briefcase, Search, Collection, CircleCheck, Checked } from '@element-plus/icons-vue';
 import { storeToRefs } from 'pinia';
 import { useAppStore } from '../core/stores/app';
 import { useProjectStore } from '../core/stores/project';
@@ -86,6 +96,21 @@ async function save() {
     const saved = await projectStore.persist();
     if (saved) {
       ElMessage.success('已保存到 project.json');
+    } else {
+      ElMessage.error(projectStore.error || '保存失败');
+    }
+  } catch (e) {
+    ElMessage.error(`保存失败：${(e as Error).message}`);
+  }
+}
+
+/** 翻转"归档完成"（v1.2.4 显式终态；已归档的项目不再显示在右上角未完成悬浮窗）。 */
+async function toggleArchived() {
+  const next = projectStore.toggleArchived();
+  try {
+    const saved = await projectStore.persist();
+    if (saved) {
+      ElMessage.success(next ? '已标记为"归档完成"，不再显示在右上角未完成列表' : '已取消归档，重新出现在右上角未完成列表');
     } else {
       ElMessage.error(projectStore.error || '保存失败');
     }

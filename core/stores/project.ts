@@ -133,6 +133,15 @@ export const useProjectStore = defineStore('project', {
       this.touch();
     },
 
+    /** 翻转"归档完成"开关（v1.2.4 显式终态，取代阶段关键词启发式）。 */
+    toggleArchived() {
+      if (!this.project) return;
+      const next = !this.project.info.archived;
+      this.project.info = { ...this.project.info, archived: next };
+      this.touch();
+      return next;
+    },
+
     /* ---------- 插槽树 CRUD ---------- */
 
     /** 新建插槽。parentSlotId 为空 = 顶层（阶段）；否则挂到该插槽下（子插槽）。实时建对应文件夹。 */

@@ -24,13 +24,12 @@
           v-for="p in items"
           :key="p.folder"
           class="tb-item"
-          :class="{ archived: isArchived(p.stage) }"
           @click="showMain"
           :title="`点击查看（${p.name}）`"
         >
           <div class="tb-item-main">
             <span class="tb-item-name">{{ p.name }}</span>
-            <el-tag size="small" :type="stageTagType(p.stage)" class="tb-item-stage">{{ p.stage || '未标记' }}</el-tag>
+            <el-tag size="small" type="info" class="tb-item-stage">{{ p.stage || '未标记阶段' }}</el-tag>
           </div>
           <div class="tb-item-sub">{{ p.code }}{{ p.region ? ' · ' + p.region : '' }}</div>
         </div>
@@ -60,19 +59,6 @@ const rootDir = ref('');
 const loading = ref(true);
 const items = ref<TrayProject[]>([]);
 
-/** "未完成归档" = stage 不含完成标记（已归档/已完成/完成/结束/收尾）。 */
-const ARCHIVED_MARKERS = ['已归档', '归档完成', '已完成', '完成', '结束', '收尾', '已完'];
-function isArchived(stage?: string): boolean {
-  if (!stage) return false;
-  return ARCHIVED_MARKERS.some((m) => stage.includes(m));
-}
-
-function stageTagType(stage?: string): '' | 'success' | 'warning' | 'info' {
-  if (!stage) return 'info';
-  if (isArchived(stage)) return 'success';
-  return 'warning';
-}
-
 onMounted(async () => {
   try {
     rootDir.value = await window.api.getLastRootDir();
@@ -85,9 +71,9 @@ onMounted(async () => {
   }
   try {
     const list = await window.api.listProjects(rootDir.value);
-    // 只列"未完成归档"的项目（stage 不含完成标记）
+    // 只列"未完成归档"的项目（v1.2.4：未显式标记 archived；旧项目无该字段视为未完成）
     items.value = list
-      .filter((p) => !isArchived(p.info?.stage))
+      .filter((p) => p.info?.archived !== true)
       .map((p) => ({
         name: p.info?.name || p.name,
         code: p.info?.code || '',
@@ -209,9 +195,6 @@ function onDragEnd() {
 }
 .tb-item:hover {
   background: #ecf5ff;
-}
-.tb-item.archived {
-  opacity: 0.6;
 }
 .tb-item-main {
   display: flex;

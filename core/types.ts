@@ -47,6 +47,12 @@ export interface ProjectInfo {
   remark?: string;
   /** 分类取值（维度 id → 取值） */
   categories?: CategoryValues;
+  /**
+   * 归档完成（v1.2.4 显式开关，取代"阶段关键词"启发式）。
+   * true = 已完成归档（终态）→ 不显示在右上角"未完成归档项目"悬浮窗。
+   * 旧项目无此字段 → 视为 false（未完成，向后兼容）。
+   */
+  archived?: boolean;
 }
 
 /**

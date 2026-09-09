@@ -55,6 +55,13 @@
               <el-table-column v-if="groupDim" :label="groupDimName" width="110">
                 <template #default="{ row }">{{ row.info?.categories?.[groupDim] || '—' }}</template>
               </el-table-column>
+              <el-table-column label="状态" width="90">
+                <template #default="{ row }">
+                  <el-tag size="small" :type="row.info?.archived ? 'success' : 'warning'">
+                    {{ row.info?.archived ? '已归档' : '进行中' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
               <el-table-column label="操作" width="120" fixed="right">
                 <template #default="{ row }">
                   <el-button size="small" link type="primary" @click.stop="open(row)">打开</el-button>
