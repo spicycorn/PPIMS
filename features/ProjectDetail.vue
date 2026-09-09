@@ -23,14 +23,14 @@
     </el-header>
 
     <div class="app-main">
-      <!-- 左：插槽树（顶层插槽 + 嵌套子插槽） -->
+      <!-- 左：项目归档列表（顶层插槽 + 嵌套子插槽；选择/添加/删除均在此） -->
       <div class="app-sidebar">
         <SlotTreePanel :slots="projectStore.slots" :selected-slot-id="selectedSlotId" :root="true" @select="onSelectSlot" />
       </div>
 
-      <!-- 右：插槽工作区（文件 + 子插槽） -->
+      <!-- 右：插槽工作区（文件管理 + 子插槽展示） -->
       <div class="app-content">
-        <el-empty v-if="!selectedSlot" description="请在左侧选择一个插槽，上传 / 管理文件，或添加子插槽" />
+        <el-empty v-if="!selectedSlot" description="请在左侧「项目归档列表」选择一个插槽，上传 / 管理文件" />
         <SlotWorkspace v-else :slot="selectedSlot" />
       </div>
     </div>

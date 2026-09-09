@@ -2,7 +2,7 @@
   <div class="slottree">
     <div v-if="root" class="sp-head">
       <el-icon><Files /></el-icon>
-      <span>插槽树</span>
+      <span>项目归档列表</span>
       <div style="flex: 1"></div>
       <el-button size="small" :icon="Plus" @click="addTop">插槽</el-button>
     </div>
@@ -22,6 +22,7 @@
         <span class="slot-name">{{ slot.name }}</span>
         <span class="muted">({{ slot.files.length }})</span>
         <div class="slot-actions" @click.stop>
+          <el-button size="small" link type="primary" :icon="Plus" @click="addSub(slot)" title="添加子插槽" />
           <el-button size="small" link :icon="Top" @click="move(slot.id, -1)" title="上移" />
           <el-button size="small" link :icon="Bottom" @click="move(slot.id, 1)" title="下移" />
           <el-button size="small" link :icon="Edit" @click="rename(slot)" title="改名" />
@@ -29,16 +30,14 @@
         </div>
       </div>
 
-      <!-- 子插槽（递归自身）+ "子插槽"按钮 -->
-      <div class="subtree">
+      <!-- 子插槽（递归自身；"添加子插槽"已并入上方操作行的"添加"按钮） -->
+      <div class="subtree" v-if="slot.subSlots.length">
         <slot-tree-panel
-          v-if="slot.subSlots.length"
           :slots="slot.subSlots"
           :selected-slot-id="selectedSlotId"
           :root="false"
           @select="(id) => emit('select', id)"
         />
-        <el-button size="small" text type="primary" :icon="Plus" @click="addSub(slot)">子插槽</el-button>
       </div>
     </div>
   </div>
