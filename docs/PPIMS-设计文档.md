@@ -1,7 +1,14 @@
-# 个人项目信息管理系统 · 设计文档（v1.2.4）
+# 个人项目信息管理系统 · 设计文档（v1.2.5）
 
-> **版本**：v1.2.4
-> **本版变更（v1.2.4）**：
+> **版本**：v1.2.5
+> **本版变更（v1.2.5）**：
+> 修复：**"分类维度"无法保存**（设置过的维度每次返回列表页都丢失）——
+>   根因：维度定义是 Vue reactive Proxy，`saveDimensions` 直接把它过 Electron IPC 触发 "An object could not be cloned"
+>   （与 v1.2.2 保存同一根因，当时只修了项目保存、漏了维度保存），落盘前静默失败 → 维度只存内存、从未写入 `<root>/ppims.json`；
+>   现落盘前 `JSON.parse(JSON.stringify())` 深克隆成纯对象再过 IPC，增/删/改名维度真正持久化（事件链：addDim→saveDimensions→IPC 落盘→重载 loadDimensions 读回）。
+> 清理：按"只保留 GitHub 上传所需文件"移除测试套件（删 `dev/test/` + `vitest.config.ts`，同步去 package.json/build.yml/tsconfig/pnpm-lock 的测试引用）；构建保留"类型检查 + 构建"。
+>
+> **上版变更（v1.2.4）**：
 > 判定标准：**"项目是否完成归档"改为显式 `archived` 开关**（取代旧的"阶段关键词"启发式）——
 >   旧逻辑靠阶段文本含"完成/已归档/结束"等子串判断，隐式、靠记性改文本、且"完成度评估"会误判为已归档；
 >   现项目界面加"标记已归档 / 取消归档"按钮（`info.archived` 布尔），点一下即翻转并落盘；
@@ -137,7 +144,6 @@ PPIMS/
     SlotWorkspace / FilePanel / FileEditor / TemplateManager /
     SearchPanel / SlotStructureEditor
   dev/
-    test/               ← unit.test.ts（vitest）+ run-standalone.ts（Node 原生）
     scripts/            ← build-electron / gen-icon / derive-icons
   docs/                 ← 本文档
   README.md
@@ -311,7 +317,7 @@ StructureTemplate（结构模板 = 阶段 + 插槽树，无模板文件）
 | 6 | 结构模板 = 阶段 + 插槽树（无模板文件） | 用户要求"结构模板不含模板文件" |
 | 7 | 文件扁平存 files/（**v1.2.2 已被取代**） | 原始意图便于搬移、避免多级目录复杂度；v1.2.2 按用户期望改为"嵌套镜像"（见 ADR #23），旧数据自动迁移（ADR #25） |
 | 8 | 数据模型 v1.0.0 不兼容旧版 | 大版本升级，用户接受直接新模型 |
-| 9 | 测试用 vitest + Node 原生独立脚本 | 环境限制（esbuild 无法 spawn）时用 Node 原生 TS 类型剥离跑纯逻辑 |
+| 9 | 测试用 vitest + Node 原生独立脚本（**v1.2.5 已移除**） | 原为环境限制（esbuild 无法 spawn）时用 Node 原生 TS 类型剥离跑纯逻辑；v1.2.5 清理时随测试套件一并移除（构建不再以测试为必需步骤） |
 | 10 | v1.1.0 删除内置编辑，只外部预览/编辑 | 用户反馈"内置编辑做得太烂"，交给 Word/Excel 等专业工具更可靠 |
 | 11 | v1.1.0 软件自带预置模板 | 用户反馈"软件很空不易上手"，预置一套开箱即用 |
 | 12 | v1.1.0 托盘 + 桌面悬浮框 | 用户要求"缩小到菜单栏 + 桌面悬浮未完成归档项目" |
@@ -330,3 +336,5 @@ StructureTemplate（结构模板 = 阶段 + 插槽树，无模板文件）
 | 25 | v1.2.2 旧项目扁平 files/ 自动迁移 | 兼容 v1.0.0–v1.2.1 数据：PROJECT_LOAD 检测 path 以 `files/` 开头的文件，物理移动到插槽文件夹 + 更新 path + 补齐缺失插槽文件夹（idempotent，自愈合） |
 | 26 | v1.2.3 "添加子插槽"并入插槽操作行 + 右区移除 + 更名"项目归档列表" | 用户要求"添加子插槽更隐蔽、放操作行；右区不显示添加操作；所有插槽选择在左侧；插槽树更名"；操作行悬停显示（隐蔽），统一入口在左，右区只留文件管理 + 子插槽展示 |
 | 27 | v1.2.4 "完成归档"改显式 `archived` 开关 | 用户问"程序怎么判断项目完成归档"；旧逻辑是阶段文本含"完成/已归档"子串（隐式、靠记性、"完成度评估"误判）；改为显式布尔开关，项目界面一键翻转 + 落盘，悬浮窗只列 archived≠true，零误判 |
+| 28 | v1.2.5 修复"分类维度"无法保存 | 维度定义是 Vue reactive Proxy，`saveDimensions` 直接过 Electron IPC 触发 "An object could not be cloned"（v1.2.2 同根因，当时只修项目保存、漏维度保存）→ 落盘静默失败、维度只存内存；落盘前 `JSON.parse(JSON.stringify())` 深克隆成纯对象再过 IPC（与 persist 同一修法），增/删/改名维度真正持久化到 `<root>/ppims.json` |
+| 29 | v1.2.5 移除测试套件 | 用户要求"只保留 GitHub 上传所需文件"；同步清理：删 `dev/test/` + `vitest.config.ts`，去 `package.json` 的 test 脚本与 vitest 依赖、`build.yml` 的测试步骤、`tsconfig.json` 的 include、`pnpm-lock.yaml` 的 vitest 条目；构建保留"类型检查 + 构建"（vue-tsc 仍覆盖全部源码） |

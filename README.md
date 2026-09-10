@@ -1,4 +1,4 @@
-# PPIMS · 个人项目信息管理系统（v1.2.4）
+# PPIMS · 个人项目信息管理系统（v1.2.5）
 
 桌面端工具，把"项目 → 插槽树（阶段可嵌套）→ 文件"这条归档主链路管起来：
 **套用预置结构模板**（软件自带"岩土勘察项目（标准）"，开箱即用）+ 新字段表单建项（类型自由输入）、
@@ -6,6 +6,10 @@
 **外部预览/编辑**（系统程序打开 Word/Excel）+ 下载、检索、**托盘 + 桌面悬浮框**（缩小到菜单栏，
 **右上角**悬浮"未完成归档项目"，**设置菜单**含开机自启/关闭行为）、**可扩展多维分类**（地区/专业/客户…）。
 
+> **v1.2.5**：修复"分类维度"无法保存（设置过的维度每次返回列表页都丢失）——根因：维度定义是 Vue reactive Proxy，
+> `saveDimensions` 直接把它过 Electron IPC 触发 "An object could not be cloned"（与 v1.2.2 保存同一根因，当时只修了项目保存、漏了维度保存），
+> 落盘前静默失败 → 维度只存内存、从未写入 `<root>/ppims.json`。现落盘前 JSON 深克隆成纯对象再过 IPC，增/删/改名维度真正持久化。
+>
 > **v1.2.4**：项目"完成归档"改显式开关——项目界面"标记已归档 / 取消归档"一键翻转（取代旧"阶段关键词"启发式，零误判）；
 > 右上角"未完成归档项目"悬浮窗只列未归档项目；项目列表新增"状态"列（已归档 / 进行中）。
 >
@@ -49,7 +53,7 @@ PPIMS/
 ├─ features/            # 功能层（Vue 3 + Element Plus UI 组件）：
 │                      #   ProjectList / ProjectDetail / SlotTreePanel / SlotWorkspace /
 │                      #   FilePanel / TrayBox / TemplateManager / SearchPanel / SlotStructureEditor
-├─ dev/                 # 非 GitHub 相关：test（unit.test.ts + run-standalone.ts）+ scripts（build-electron、gen-icon、derive-icons）
+├─ dev/                 # scripts（build-electron、gen-icon、derive-icons）
 ├─ public/              # 应用图标（icon.png / icon-*.png / icon.ico）
 ├─ docs/                # 设计文档（PPIMS-设计文档.md，唯一事实源）
 ├─ .github/             # CI（Build & Release，Actions 触发打包/发布）
@@ -57,7 +61,7 @@ PPIMS/
 ├─ tray-box.html        # Vite 桌面悬浮框入口（v1.1.0 托盘悬浮框）
 ├─ electron-builder.yml # 打包配置（图标、便携 exe、代码签名、发布）
 ├─ package.json         # 依赖与脚本
-└─ *.config / tsconfig / vitest.config   # Vite / 类型 / 测试配置
+└─ *.config / tsconfig               # Vite / 类型
 ```
 
 > 分层原则：`core/` 是核心管理层（纯逻辑 + 主进程 + 状态 + 渲染骨架），`features/` 是功能层（UI 组件）；
@@ -116,9 +120,8 @@ Get-FileHash .\PPIMS-x.y.z-win-x64.exe -Algorithm SHA256
 # 安装依赖（依赖全部落在本目录 node_modules，运行时产物自包含、不依赖 CDN）
 pnpm install
 
-# 类型检查 + 单元测试 + 构建（渲染层 Vite + 主进程 esbuild）
+# 类型检查 + 构建（渲染层 Vite + 主进程 esbuild）
 pnpm run typecheck
-pnpm run test
 pnpm run build
 
 # 重新生成应用图标（可爱小人整理文件夹）
@@ -129,5 +132,5 @@ pnpm run dev:electron
 ```
 
 打包/发布**只能由 GitHub Actions 触发**（设计文档 §1.5），本地 `electron-builder`
-仅用于开发调试。推送代码后 CI 自动跑：安装 → 类型检查 → 测试 → 构建 → 打包便携 exe
+仅用于开发调试。推送代码后 CI 自动跑：安装 → 类型检查 → 构建 → 打包便携 exe
 → SHA-256 → 上传产物 → 打 tag 时发布到 Releases。

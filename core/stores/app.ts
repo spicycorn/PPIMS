@@ -11,7 +11,6 @@ export const useAppStore = defineStore('app', {
     rootDir: '',
     view: 'setup' as AppView,
     currentProjectFolder: '',
-    saving: false,
     /** 分类维度（根级配置，全局唯一；2.9 不预置业务维度） */
     dimensions: [] as CategoryDimension[],
   }),
@@ -52,7 +51,11 @@ export const useAppStore = defineStore('app', {
     /** 增/删/改名后统一落盘（主进程会 normalize） */
     async saveDimensions() {
       if (!this.rootDir) return;
-      const cfg = await window.api.saveRootConfig(this.rootDir, { dimensions: this.dimensions });
+      // 深克隆 reactive → 纯对象：this.dimensions 是 Vue reactive Proxy，直接过 Electron IPC
+      // 会触发 "An object could not be cloned"（与 project store 的 persist 同一根因）；
+      // 先 JSON 深克隆成纯数组再过 IPC，保证维度定义真正落盘。
+      const plain = JSON.parse(JSON.stringify(this.dimensions)) as CategoryDimension[];
+      const cfg = await window.api.saveRootConfig(this.rootDir, { dimensions: plain });
       this.dimensions = cfg.dimensions ?? [];
     },
     addDimension(name: string) {

@@ -1,5 +1,5 @@
 # PPIMS 打包与发布工作流（设计文档 §1.5：打包只能由 GitHub Actions 触发）
-# 流程：安装依赖 → 类型检查 → 单元测试 → 构建(渲染+主进程) → electron-builder 打包
+# 流程：安装依赖 → 类型检查 → 构建(渲染+主进程) → electron-builder 打包
 #      → SHA-256 校验和 → 上传 artifacts → 打 tag(vX.Y.Z) 时创建/追加 GitHub Release
 name: Build & Release
 
@@ -42,9 +42,6 @@ jobs:
 
       - name: Type check
         run: pnpm run typecheck
-
-      - name: Unit tests
-        run: pnpm run test
 
       - name: Build (renderer + main)
         run: pnpm run build

@@ -1,7 +1,7 @@
 {
   "name": "ppims",
-  "version": "1.2.4",
-  "description": "个人项目信息管理系统 · 本地项目资料归档管理工具（v1.2.4：显式\"归档完成\"开关取代阶段关键词启发式 + 悬浮窗据实判定 + 项目列表状态列）",
+  "version": "1.2.5",
+  "description": "个人项目信息管理系统 · 本地项目资料归档管理工具（v1.2.5：修复\"分类维度\"无法保存——Vue reactive Proxy 过 Electron IPC 无法克隆，落盘前深克隆成纯对象；维度增/删/改名真正持久化到 <root>/ppims.json）",
   "author": "spicycorn",
   "private": true,
   "license": "MIT",
@@ -17,9 +17,7 @@
     "preview": "vite preview",
     "electron:build": "electron-builder",
     "electron:build:win": "node dev/scripts/gen-icon.mjs && node dev/scripts/derive-icons.mjs && electron-builder --win",
-    "pack:win": "node dev/scripts/gen-icon.mjs && node dev/scripts/derive-icons.mjs && vue-tsc --noEmit && vite build && node dev/scripts/build-electron.mjs && electron-builder --win",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "pack:win": "node dev/scripts/gen-icon.mjs && node dev/scripts/derive-icons.mjs && vue-tsc --noEmit && vite build && node dev/scripts/build-electron.mjs && electron-builder --win"
   },
   "devDependencies": {
     "@element-plus/icons-vue": "^2.3.1",
@@ -36,7 +34,6 @@
     "pinia": "^2.2.4",
     "typescript": "^5.6.3",
     "vite": "^5.4.9",
-    "vitest": "^2.1.2",
     "vue": "^3.5.12",
     "vue-tsc": "^2.1.6",
     "xlsx": "^0.18.5"

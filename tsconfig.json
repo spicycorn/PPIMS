@@ -31,9 +31,7 @@
     "core/**/*.d.ts",
     "core/**/*.vue",
     "features/**/*.vue",
-    "dev/test/**/*.ts",
     "vite.config.ts",
-    "vitest.config.ts",
     "dev/scripts/**/*.mjs"
   ]
 }
