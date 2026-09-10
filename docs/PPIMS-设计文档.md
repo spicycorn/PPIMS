@@ -1,7 +1,14 @@
-# 个人项目信息管理系统 · 设计文档（v1.2.5）
+# 个人项目信息管理系统 · 设计文档（v1.2.6）
 
-> **版本**：v1.2.5
-> **本版变更（v1.2.5）**：
+> **版本**：v1.2.6
+> **本版变更（v1.2.6）**：
+> 修复：**"结构模板库"编辑/新建保存报 "An object could not be cloned"**——
+>   根因与 v1.2.5 维度保存同一：模板草稿 `draft` 是 Vue reactive 树，`saveEditor` 把它直接过 Electron IPC 触发 "An object could not be cloned"；
+>   现 `saveEditor` 落盘前 `JSON.parse(JSON.stringify())` 深克隆成纯对象再过 IPC（`createTemplate` / `updateTemplate` 均已修）。
+> 审计：**全项目"保存/落盘"路径统一规矩**——任何 reactive 状态过 Electron IPC 前必须先深克隆成纯对象（项目保存 persist、维度保存 saveDimensions、模板保存 saveEditor 均已符合）；
+>   其余 IPC 调用（文件/插槽/对话框/建项/改信息）只传字符串或逐值读取构建的纯对象，无 reactive 直传。
+>
+> **上版变更（v1.2.5）**：
 > 修复：**"分类维度"无法保存**（设置过的维度每次返回列表页都丢失）——
 >   根因：维度定义是 Vue reactive Proxy，`saveDimensions` 直接把它过 Electron IPC 触发 "An object could not be cloned"
 >   （与 v1.2.2 保存同一根因，当时只修了项目保存、漏了维度保存），落盘前静默失败 → 维度只存内存、从未写入 `<root>/ppims.json`；
@@ -338,3 +345,4 @@ StructureTemplate（结构模板 = 阶段 + 插槽树，无模板文件）
 | 27 | v1.2.4 "完成归档"改显式 `archived` 开关 | 用户问"程序怎么判断项目完成归档"；旧逻辑是阶段文本含"完成/已归档"子串（隐式、靠记性、"完成度评估"误判）；改为显式布尔开关，项目界面一键翻转 + 落盘，悬浮窗只列 archived≠true，零误判 |
 | 28 | v1.2.5 修复"分类维度"无法保存 | 维度定义是 Vue reactive Proxy，`saveDimensions` 直接过 Electron IPC 触发 "An object could not be cloned"（v1.2.2 同根因，当时只修项目保存、漏维度保存）→ 落盘静默失败、维度只存内存；落盘前 `JSON.parse(JSON.stringify())` 深克隆成纯对象再过 IPC（与 persist 同一修法），增/删/改名维度真正持久化到 `<root>/ppims.json` |
 | 29 | v1.2.5 移除测试套件 | 用户要求"只保留 GitHub 上传所需文件"；同步清理：删 `dev/test/` + `vitest.config.ts`，去 `package.json` 的 test 脚本与 vitest 依赖、`build.yml` 的测试步骤、`tsconfig.json` 的 include、`pnpm-lock.yaml` 的 vitest 条目；构建保留"类型检查 + 构建"（vue-tsc 仍覆盖全部源码） |
+| 30 | v1.2.6 修复"结构模板库"保存 could not be cloned + 全项目保存路径审计 | 模板草稿 `draft` 是 Vue reactive 树，`saveEditor` 直接过 Electron IPC 触发 "An object could not be cloned"（v1.2.5 维度保存同根因）；`saveEditor` 落盘前深克隆成纯对象（`createTemplate`/`updateTemplate` 均已修）；并审计全部 IPC 调用，确立"reactive 状态过 IPC 前必须深克隆成纯对象"的统一规矩 |

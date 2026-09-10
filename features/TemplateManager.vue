@@ -152,13 +152,16 @@ async function saveEditor() {
     description: draft.description,
     slots: draft.slots.filter((s) => s.name.trim()),
   };
+  // 深克隆 reactive → 纯对象：draft 是 reactive()，input.slots 嵌套 reactive Proxy，
+  // 直接过 Electron IPC 会触发 "An object could not be cloned"（与 persist / saveDimensions 同根因）。
+  const plainInput: TplCreateInput = JSON.parse(JSON.stringify(input));
   savingTpl.value = true;
   try {
     if (editing.value) {
-      await window.api.updateTemplate(editing.value, input);
+      await window.api.updateTemplate(editing.value, plainInput);
       ElMessage.success('结构模板已更新');
     } else {
-      await window.api.createTemplate(input);
+      await window.api.createTemplate(plainInput);
       ElMessage.success('结构模板已创建');
     }
     editorOpen.value = false;

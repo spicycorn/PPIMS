@@ -1,7 +1,7 @@
 {
   "name": "ppims",
-  "version": "1.2.5",
-  "description": "个人项目信息管理系统 · 本地项目资料归档管理工具（v1.2.5：修复\"分类维度\"无法保存——Vue reactive Proxy 过 Electron IPC 无法克隆，落盘前深克隆成纯对象；维度增/删/改名真正持久化到 <root>/ppims.json）",
+  "version": "1.2.6",
+  "description": "个人项目信息管理系统 · 本地项目资料归档管理工具（v1.2.6：修复\"结构模板库\"编辑/新建保存报 \"An object could not be cloned\"——草稿 reactive 树过 Electron IPC 无法克隆，落盘前深克隆成纯对象；全项目保存路径审计，统一 reactive→纯对象再 IPC）",
   "author": "spicycorn",
   "private": true,
   "license": "MIT",
