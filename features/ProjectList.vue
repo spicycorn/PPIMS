@@ -83,69 +83,76 @@
               <span>新建项目</span>
             </div>
           </template>
-          <el-form :model="form" label-width="90px" :rules="rules" ref="formRef">
-            <!-- ① 提示选模板（建项第一步） -->
-            <el-divider content-position="left">① 套用结构模板（可选，一键生成"阶段 + 插槽"树）</el-divider>
-            <el-form-item label="套用模板">
-              <el-select v-model="selectedTemplateId" clearable placeholder="结构模板（默认套用「岩土勘察项目（标准）」；清空则建空项目）" style="width: 100%">
-                <el-option v-for="t in templateList" :key="t.id" :label="t.name" :value="t.id">
-                  <span>{{ t.name }}</span>
-                  <span class="muted" style="float: right; font-size: 12px">{{ countTemplateSlots(t) }} 个插槽</span>
-                </el-option>
-              </el-select>
-            </el-form-item>
-            <el-form-item v-if="selectedTemplateId">
-              <el-alert
-                :title="`将套用「${selectedTemplateName}」的结构（阶段 + 插槽树），创建后无需再逐一手填插槽`"
-                type="success"
-                :closable="false"
-                show-icon
-              />
-            </el-form-item>
-
-            <!-- ② 项目信息（地区/名称/阶段/类型/编号/下发时间/备注） -->
-            <el-divider content-position="left">② 项目信息</el-divider>
-            <el-form-item label="地区" prop="region">
-              <el-input v-model="form.region" placeholder="项目所在地区" />
-            </el-form-item>
-            <el-form-item label="名称" prop="name">
-              <el-input v-model="form.name" placeholder="如：XX 河道治理工程勘察" />
-            </el-form-item>
-            <el-form-item label="阶段">
-              <el-input v-model="form.stage" placeholder="初始阶段（选填）" />
-            </el-form-item>
-            <el-form-item label="类型">
-              <el-input v-model="form.type" placeholder="选填 · 专业方向（如 岩土 / 物探 / 测量 / 水文 / 测绘…）" />
-            </el-form-item>
-            <el-form-item label="编号" prop="code">
-              <el-input v-model="form.code" placeholder="如：60-F14742S" />
-            </el-form-item>
-            <el-form-item label="下发时间">
-              <el-date-picker v-model="form.dispatchDate" type="date" value-format="YYYY-MM-DD" placeholder="选填" />
-            </el-form-item>
-            <el-form-item label="备注">
-              <el-input v-model="form.remark" type="textarea" :rows="2" placeholder="选填" />
-            </el-form-item>
-
-            <!-- 分类取值（动态：按当前维度渲染，2.9） -->
-            <template v-if="app.dimensions.length">
-              <el-divider content-position="left">分类（可选）</el-divider>
-              <el-form-item v-for="d in app.dimensions" :key="d.id" :label="d.name">
-                <el-input v-model="categoryValues[d.id]" :placeholder="`如：${d.name === '地区' ? '华北 / 华南…' : '填一个取值，如 岩土 / 客户A'}`" />
-              </el-form-item>
-            </template>
-
-            <el-form-item>
-              <el-button type="primary" :loading="creating" @click="create">
-                {{ selectedTemplateId ? '按结构模板创建项目' : '创建项目' }}
-              </el-button>
+          <div class="newproj">
+            <p class="muted" style="margin: 0 0 14px">
+              新建一个项目：可<strong>套用结构模板</strong>一键生成"阶段 + 插槽"树（默认「岩土勘察项目（标准）」），
+              也可建空项目再逐一手填。地区、阶段等分类信息请在「分类维度」中自定义后填写。
+            </p>
+            <el-button type="primary" :icon="Plus" size="large" @click="newOpen = true">新建项目</el-button>
+            <div class="row-gap" style="margin-top: 14px">
               <el-button :icon="Collection" @click="tplOpen = true">结构模板库</el-button>
-              <span class="muted">{{ selectedTemplateId ? '套用所选结构模板' : '不选模板则建空项目' }}（插槽可增删/改名/调序/嵌套）</span>
-            </el-form-item>
-          </el-form>
+              <el-button :icon="Operation" @click="dimOpen = true">分类维度</el-button>
+            </div>
+          </div>
         </el-card>
       </el-col>
     </el-row>
+
+    <!-- 新建项目（弹窗；v1.2.7：由常驻表单改为"按钮 → 对话框"） -->
+    <el-dialog v-model="newOpen" title="新建项目" width="640px" top="8vh" destroy-on-close>
+      <el-form :model="form" label-width="90px" :rules="rules" ref="formRef">
+        <!-- ① 套用结构模板 -->
+        <el-divider content-position="left">① 套用结构模板（可选，一键生成"阶段 + 插槽"树）</el-divider>
+        <el-form-item label="套用模板">
+          <el-select v-model="selectedTemplateId" clearable placeholder="结构模板（默认套用「岩土勘察项目（标准）」；清空则建空项目）" style="width: 100%">
+            <el-option v-for="t in templateList" :key="t.id" :label="t.name" :value="t.id">
+              <span>{{ t.name }}</span>
+              <span class="muted" style="float: right; font-size: 12px">{{ countTemplateSlots(t) }} 个插槽</span>
+            </el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="selectedTemplateId">
+          <el-alert
+            :title="`将套用「${selectedTemplateName}」的结构（阶段 + 插槽树），创建后无需再逐一手填插槽`"
+            type="success"
+            :closable="false"
+            show-icon
+          />
+        </el-form-item>
+
+        <!-- ② 项目信息（名称/类型/编号/下发时间/备注；地区、阶段改由"分类维度"承载，v1.2.7） -->
+        <el-divider content-position="left">② 项目信息</el-divider>
+        <el-form-item label="名称" prop="name">
+          <el-input v-model="form.name" placeholder="如：XX 河道治理工程勘察" />
+        </el-form-item>
+        <el-form-item label="类型">
+          <el-input v-model="form.type" placeholder="选填 · 专业方向（如 岩土 / 物探 / 测量 / 水文 / 测绘…）" />
+        </el-form-item>
+        <el-form-item label="编号" prop="code">
+          <el-input v-model="form.code" placeholder="如：60-F14742S" />
+        </el-form-item>
+        <el-form-item label="下发时间">
+          <el-date-picker v-model="form.dispatchDate" type="date" value-format="YYYY-MM-DD" placeholder="选填" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="form.remark" type="textarea" :rows="2" placeholder="选填" />
+        </el-form-item>
+
+        <!-- 分类取值（动态：按当前维度渲染，2.9；地区/阶段等自定义维度在此填） -->
+        <template v-if="app.dimensions.length">
+          <el-divider content-position="left">分类（可选）</el-divider>
+          <el-form-item v-for="d in app.dimensions" :key="d.id" :label="d.name">
+            <el-input v-model="categoryValues[d.id]" placeholder="填一个取值，如 华北 / 岩土 / 客户A" />
+          </el-form-item>
+        </template>
+      </el-form>
+      <template #footer>
+        <el-button @click="newOpen = false">取消</el-button>
+        <el-button type="primary" :loading="creating" @click="create">
+          {{ selectedTemplateId ? '按结构模板创建项目' : '创建项目' }}
+        </el-button>
+      </template>
+    </el-dialog>
 
     <!-- 分类维度管理（2.9：用户自定义、可扩展多维） -->
     <el-dialog v-model="dimOpen" title="分类维度（自定义、可扩展）" width="520px" destroy-on-close>
@@ -197,6 +204,7 @@ import TemplateManager from './TemplateManager.vue';
 import type { ProjectInfo, StructureTemplate, CategoryDimension, CategoryValues } from '../core/types';
 import { countTemplateSlots } from '../core/template-mapping';
 import { distinctValues } from '../core/classify';
+import { PRESET_TEMPLATES } from '../core/presets';
 
 const app = useAppStore();
 const projectStore = useProjectStore();
@@ -205,6 +213,7 @@ const { rootDir } = storeToRefs(app);
 const items = ref<Array<{ name: string; folder: string; info: ProjectInfo | null }>>([]);
 const creating = ref(false);
 const formRef = ref<FormInstance>();
+const newOpen = ref(false); // 新建项目对话框（v1.2.7：按钮 → 对话框）
 
 // 结构模板（全局蓝图）
 const templateList = ref<StructureTemplate[]>([]);
@@ -273,9 +282,11 @@ const categoryValues = reactive<CategoryValues>({});
 async function loadTemplates() {
   try {
     templateList.value = await window.api.listTemplates();
-    // 默认选中预置模板（软件自带一套，开箱即用；建项默认套用）
+    // 默认选中预置模板（软件自带一套，开箱即用；建项默认套用）。
+    // 按"预置模板名集合"匹配（单一事实源 PRESET_TEMPLATES，不硬编码具体名字）。
     if (!selectedTemplateId.value && templateList.value.length) {
-      const preset = templateList.value.find((t) => t.name === '岩土勘察项目（标准）') ?? templateList.value[0];
+      const presetNames = new Set(PRESET_TEMPLATES.map((p) => p.name));
+      const preset = templateList.value.find((t) => presetNames.has(t.name)) ?? templateList.value[0];
       selectedTemplateId.value = preset.id;
     }
   } catch {
@@ -286,8 +297,6 @@ async function loadTemplates() {
 const form = reactive<ProjectInfo>({
   name: '',
   code: '',
-  region: '',
-  stage: '',
   type: '',
   dispatchDate: '',
   remark: '',
@@ -327,9 +336,10 @@ async function create() {
       ElMessage.success(`项目已创建：${info.name}`);
     }
     // 重置表单与分类取值
-    Object.assign(form, { name: '', code: '', region: '', stage: '', type: '', dispatchDate: '', remark: '' });
+    Object.assign(form, { name: '', code: '', type: '', dispatchDate: '', remark: '' });
     selectedTemplateId.value = '';
     for (const k of Object.keys(categoryValues)) delete categoryValues[k];
+    newOpen.value = false; // 关闭"新建项目"对话框
     await app.openProject(folder);
     await projectStore.load(folder);
     await refresh();

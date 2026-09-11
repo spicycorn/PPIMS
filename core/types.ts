@@ -35,10 +35,6 @@ export interface ProjectInfo {
   name: string;
   /** 项目编号（必填） */
   code: string;
-  /** 地区（选填） */
-  region?: string;
-  /** 初始阶段（选填，自由文本） */
-  stage?: string;
   /** 类型（选填，如 勘测/设计/施工…） */
   type?: string;
   /** 下发时间（选填，ISO 日期） */

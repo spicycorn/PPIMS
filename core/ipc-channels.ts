@@ -16,6 +16,12 @@ export const IPC = {
   ROOT_DIR_PERSIST: 'root:dir:persist',
   ROOT_DIR_GET_LAST: 'root:dir:getLast',
 
+  // 主进程 → 渲染层 推送（v1.2.7：悬浮框实时刷新 + 主窗口导航）
+  // 项目集合/状态变化（新建/归档/取消归档/删除/保存）→ 广播给所有窗口，悬浮框据此实时重取列表
+  PROJECTS_CHANGED: 'projects:changed',
+  // 悬浮框请求主窗口导航：{ folder } 非空=打开该项目，空=回项目列表
+  MAIN_NAVIGATE: 'main:navigate',
+
   // 项目
   PROJECT_LIST: 'project:list',
   PROJECT_CREATE: 'project:create',

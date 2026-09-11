@@ -17,6 +17,7 @@
 import { app, BrowserWindow, Menu, Tray, nativeImage, screen, ipcMain } from 'electron';
 import path from 'node:path';
 import { getSettings, toggleCloseToTray, getAutoStart, setAutoStart } from './services/settings';
+import { IPC } from './ipc-channels';
 
 let tray: Tray | null = null;
 let trayBox: BrowserWindow | null = null;
@@ -186,15 +187,18 @@ export function setupTray(win: BrowserWindow): void {
   if (tray) return;
   mainWin = win;
 
-  // 悬浮框请求"显示主窗口"（点击未归档项目时）——互斥：主窗口出现，悬浮窗同时消失
-  ipcMain.handle('tray-box:showMain', () => {
+  // 悬浮框请求"显示主窗口 + 导航"——互斥：主窗口出现，悬浮窗同时消失。
+  // folder 非空 → 主窗口打开该项目；folder 空 → 主窗口回项目列表。
+  ipcMain.handle('tray-box:showMain', (_e, folder?: string) => {
     hideTrayBox(); // 显式隐藏悬浮窗（主窗口出现即互斥）
     if (mainWin) {
       if (mainWin.isMinimized()) mainWin.restore();
       mainWin.show();
       mainWin.focus();
+      // 通知主窗口渲染层导航（打开指定项目 / 回列表）
+      mainWin.webContents.send(IPC.MAIN_NAVIGATE, { folder: folder ?? '' });
     }
-    return { shown: true };
+    return { shown: !!mainWin };
   });
 
   // 互斥：主窗口"显示/聚焦"（任何方式——托盘点击·showMain·其他）→ 隐藏悬浮窗

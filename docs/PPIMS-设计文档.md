@@ -1,7 +1,22 @@
-# 个人项目信息管理系统 · 设计文档（v1.2.6）
+# 个人项目信息管理系统 · 设计文档（v1.2.7）
 
-> **版本**：v1.2.6
-> **本版变更（v1.2.6）**：
+> **版本**：v1.2.7
+> **本版变更（v1.2.7）**：
+> ① 预置模板一次性种入：`seedPresetTemplates` 旧版按"名"去重、删除后重启重新种入；
+>   现按预置稳定 `key` 记录"已种过"（存 `ppims-settings.json` 的 `seededPresets`），只种一次，删除后不再复活；
+>   升级兼容：旧版已按名种过的预置只补记 key（`existingNames` 命中则不重复 `materializeTemplate`），避免同名两份。
+> ② 悬浮窗实时刷新：主进程在 新建(PROJECT_CREATE)/套模板建项(TPL_APPLY)/保存(PROJECT_SAVE，含归档开关)/改信息(PROJECT_PATCH_INFO)/删除(PROJECT_DELETE)
+>   后统一调 `notifyProjectsChanged()`（`BrowserWindow.getAllWindows()` 广播 `projects:changed`）；
+>   悬浮窗 `TrayBox` 订阅 `onProjectsChanged` 后重取列表（`refresh`），同一次运行内归档/新建/取消归档/删除均实时反映。
+> ③ 悬浮窗点击导航：`trayBoxShowMain(folder?)`——folder 非空=打开该项目、空=回列表；
+>   主进程 `tray-box:showMain` 显示/聚焦主窗口并 `webContents.send('main:navigate', {folder})`；
+>   主窗口 `App.vue` 订阅 `onMainNavigate` 据 `folder` 打开项目（`openProject`+`load`，切项目先 `reset` 避免旧内容闪现）或回列表（`closeProject`）；
+>   边界：主窗口 `rootDir` 为空时先从磁盘 `getLastRootDir` 恢复。
+> ④ 新建项目改按钮+对话框：`ProjectList` 右侧常驻表单改为"新建项目"按钮 → `el-dialog`（`destroy-on-close`）填写；
+>   去除 `region`/`stage` 字段（`ProjectInfo` 类型、新建表单、悬浮窗/项目详情展示均已移除），改由"分类维度"自定义承载。
+> 无硬编码：默认模板选择改按 `PRESET_TEMPLATES` 名集合匹配（单一事实源）；事件链全打通、无死代码/模拟过程。
+>
+> **上版变更（v1.2.6）**：
 > 修复：**"结构模板库"编辑/新建保存报 "An object could not be cloned"**——
 >   根因与 v1.2.5 维度保存同一：模板草稿 `draft` 是 Vue reactive 树，`saveEditor` 把它直接过 Electron IPC 触发 "An object could not be cloned"；
 >   现 `saveEditor` 落盘前 `JSON.parse(JSON.stringify())` 深克隆成纯对象再过 IPC（`createTemplate` / `updateTemplate` 均已修）。
@@ -346,3 +361,7 @@ StructureTemplate（结构模板 = 阶段 + 插槽树，无模板文件）
 | 28 | v1.2.5 修复"分类维度"无法保存 | 维度定义是 Vue reactive Proxy，`saveDimensions` 直接过 Electron IPC 触发 "An object could not be cloned"（v1.2.2 同根因，当时只修项目保存、漏维度保存）→ 落盘静默失败、维度只存内存；落盘前 `JSON.parse(JSON.stringify())` 深克隆成纯对象再过 IPC（与 persist 同一修法），增/删/改名维度真正持久化到 `<root>/ppims.json` |
 | 29 | v1.2.5 移除测试套件 | 用户要求"只保留 GitHub 上传所需文件"；同步清理：删 `dev/test/` + `vitest.config.ts`，去 `package.json` 的 test 脚本与 vitest 依赖、`build.yml` 的测试步骤、`tsconfig.json` 的 include、`pnpm-lock.yaml` 的 vitest 条目；构建保留"类型检查 + 构建"（vue-tsc 仍覆盖全部源码） |
 | 30 | v1.2.6 修复"结构模板库"保存 could not be cloned + 全项目保存路径审计 | 模板草稿 `draft` 是 Vue reactive 树，`saveEditor` 直接过 Electron IPC 触发 "An object could not be cloned"（v1.2.5 维度保存同根因）；`saveEditor` 落盘前深克隆成纯对象（`createTemplate`/`updateTemplate` 均已修）；并审计全部 IPC 调用，确立"reactive 状态过 IPC 前必须深克隆成纯对象"的统一规矩 |
+| 31 | v1.2.7 预置模板一次性种入 | 用户反馈"删除默认模板后重启又复活"；旧版 `seedPresetTemplates` 按模板"名"去重、名不在就重种（保证"自带"但删除不持久）；改为按预置稳定 `key` 在 `ppims-settings.json` 记 `seededPresets`，只种一次；升级兼容：旧版已按名种过的只补记 key（`existingNames` 命中不重复 `materializeTemplate`），避免同名两份 |
+| 32 | v1.2.7 悬浮窗实时显示未归档项目 | 用户反馈"同一次运行内归档/新建项目，悬浮窗不刷新（重启后才对）"；旧版 `TrayBox` 仅 `onMounted` 读一次；现主进程在 5 个变更点（CREATE/TPL_APPLY/SAVE/PATCH_INFO/DELETE）统一 `notifyProjectsChanged()` 广播 `projects:changed`，`TrayBox` 订阅 `onProjectsChanged`→`refresh()` 实时重取 |
+| 33 | v1.2.7 悬浮窗点击导航到对应项目/列表 | 用户要求"点项目进该项目管理界面、点打开主窗口进项目总体界面"；`trayBoxShowMain(folder?)` 带 folder（非空=项目/空=列表），主进程 `tray-box:showMain` 显示主窗口并 `send('main:navigate',{folder})`，`App.vue` 订阅 `onMainNavigate` 据此 `openProject`+`load`（切项目先 `reset` 防旧内容闪现）或 `closeProject`；边界：主窗口 `rootDir` 空则先 `getLastRootDir` 恢复 |
+| 34 | v1.2.7 新建项目改按钮+对话框、去地区/阶段 | 用户建议"新建项目变按钮、点按钮弹填写框；地区/阶段去掉（改由分类维度自主添加）"；`ProjectList` 右侧常驻表单改"新建项目"按钮→`el-dialog`（`destroy-on-close`）；`region`/`stage` 从 `ProjectInfo` 类型、新建表单、悬浮窗/详情展示全链路移除（旧数据成孤儿、无害），改由"分类维度"承载；默认模板选择改按 `PRESET_TEMPLATES` 名集合匹配（去硬编码名字） |

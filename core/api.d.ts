@@ -34,8 +34,13 @@ export interface Api {
   persistRootDir(rootDir: string): Promise<{ saved: string }>;
   getLastRootDir(): Promise<string>;
 
-  /** 从悬浮框请求显示主窗口（点击未归档项目时）。 */
-  trayBoxShowMain(): Promise<{ shown: boolean }>;
+  /** 悬浮框请求主窗口导航：folder 非空=打开该项目，空/省略=回项目列表。 */
+  trayBoxShowMain(folder?: string): Promise<{ shown: boolean }>;
+
+  /** 订阅"项目集合/状态变化"广播（主进程→渲染层），返回取消订阅函数。悬浮框据此实时刷新。 */
+  onProjectsChanged(cb: () => void): () => void;
+  /** 订阅"主窗口导航"指令（来自悬浮框点击），返回取消订阅函数。payload.folder 非空=打开该项目。 */
+  onMainNavigate(cb: (payload: { folder: string }) => void): () => void;
 
   listProjects(rootDir: string): Promise<ProjectListItem[]>;
   createProject(rootDir: string, project: Project): Promise<{ folder: string; folderName: string; rootPath: string }>;

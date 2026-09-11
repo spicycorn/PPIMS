@@ -24,7 +24,13 @@ export interface Api {
   persistRootDir(rootDir: string): Promise<{ saved: string }>;
   getLastRootDir(): Promise<string>;
 
-  trayBoxShowMain(): Promise<{ shown: boolean }>;
+  /** 悬浮框请求主窗口导航：folder 非空=打开该项目，空/省略=回项目列表。 */
+  trayBoxShowMain(folder?: string): Promise<{ shown: boolean }>;
+
+  /** 订阅"项目集合/状态变化"广播（主进程→渲染层），返回取消订阅函数。悬浮框据此实时刷新。 */
+  onProjectsChanged(cb: () => void): () => void;
+  /** 订阅"主窗口导航"指令（来自悬浮框点击），返回取消订阅函数。payload.folder 非空=打开该项目。 */
+  onMainNavigate(cb: (payload: { folder: string }) => void): () => void;
 
   // 项目
   listProjects(rootDir: string): Promise<Array<{ name: string; folder: string; info: Project['info'] | null }>>;
@@ -67,7 +73,18 @@ const api: Api = {
   persistRootDir: (rootDir) => ipcRenderer.invoke('root:dir:persist', rootDir),
   getLastRootDir: () => ipcRenderer.invoke('root:dir:getLast'),
 
-  trayBoxShowMain: () => ipcRenderer.invoke('tray-box:showMain'),
+  trayBoxShowMain: (folder) => ipcRenderer.invoke('tray-box:showMain', folder),
+
+  onProjectsChanged: (cb) => {
+    const listener = () => cb();
+    ipcRenderer.on('projects:changed', listener);
+    return () => ipcRenderer.removeListener('projects:changed', listener);
+  },
+  onMainNavigate: (cb) => {
+    const listener = (_e: unknown, payload: { folder: string }) => cb(payload ?? { folder: '' });
+    ipcRenderer.on('main:navigate', listener);
+    return () => ipcRenderer.removeListener('main:navigate', listener);
+  },
 
   listProjects: (rootDir) => ipcRenderer.invoke('project:list', rootDir),
   createProject: (rootDir, project) => ipcRenderer.invoke('project:create', { rootDir, project }),

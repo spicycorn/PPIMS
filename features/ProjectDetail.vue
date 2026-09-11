@@ -11,7 +11,6 @@
           </div>
           <div class="muted mono">
             {{ project!.info.code }}
-            <template v-if="project!.info.region"> · {{ project!.info.region }}</template>
             <template v-if="project!.info.type"> · {{ project!.info.type }}</template>
             <template v-if="project!.info.dispatchDate"> · 下发 {{ project!.info.dispatchDate }}</template>
           </div>

@@ -1,7 +1,7 @@
 {
   "name": "ppims",
-  "version": "1.2.6",
-  "description": "个人项目信息管理系统 · 本地项目资料归档管理工具（v1.2.6：修复\"结构模板库\"编辑/新建保存报 \"An object could not be cloned\"——草稿 reactive 树过 Electron IPC 无法克隆，落盘前深克隆成纯对象；全项目保存路径审计，统一 reactive→纯对象再 IPC）",
+  "version": "1.2.7",
+  "description": "个人项目信息管理系统 · 本地项目资料归档管理工具（v1.2.7：预置模板一次性种入（删除后不再复活）；悬浮窗实时显示未归档项目 + 点击项目直达该项目、\"打开主窗口\"回列表；新建项目改按钮+对话框，去除地区/阶段字段（改由分类维度承载））",
   "author": "spicycorn",
   "private": true,
   "license": "MIT",

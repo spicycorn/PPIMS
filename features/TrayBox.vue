@@ -24,14 +24,13 @@
           v-for="p in items"
           :key="p.folder"
           class="tb-item"
-          @click="showMain"
-          :title="`点击查看（${p.name}）`"
+          @click="openProject(p.folder)"
+          :title="`点击进入该项目（${p.name}）`"
         >
           <div class="tb-item-main">
             <span class="tb-item-name">{{ p.name }}</span>
-            <el-tag size="small" type="info" class="tb-item-stage">{{ p.stage || '未标记阶段' }}</el-tag>
           </div>
-          <div class="tb-item-sub">{{ p.code }}{{ p.region ? ' · ' + p.region : '' }}</div>
+          <div class="tb-item-sub">{{ p.code }}</div>
         </div>
       </div>
     </div>
@@ -44,20 +43,43 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { ElMessage } from 'element-plus';
 
 interface TrayProject {
   name: string;
   code: string;
   folder: string;
-  stage?: string;
-  region?: string;
 }
 
 const rootDir = ref('');
 const loading = ref(true);
 const items = ref<TrayProject[]>([]);
+
+let offChanged: (() => void) | null = null;
+
+/** 重新取"未完成归档"项目列表（v1.2.4：未显式标记 archived；旧项目无该字段视为未完成）。 */
+async function refresh() {
+  if (!rootDir.value) {
+    items.value = [];
+    loading.value = false;
+    return;
+  }
+  try {
+    const list = await window.api.listProjects(rootDir.value);
+    items.value = list
+      .filter((p) => p.info?.archived !== true)
+      .map((p) => ({
+        name: p.info?.name || p.name,
+        code: p.info?.code || '',
+        folder: p.folder,
+      }));
+  } catch {
+    items.value = [];
+  } finally {
+    loading.value = false;
+  }
+}
 
 onMounted(async () => {
   try {
@@ -65,31 +87,27 @@ onMounted(async () => {
   } catch {
     rootDir.value = '';
   }
-  if (!rootDir.value) {
-    loading.value = false;
-    return;
-  }
-  try {
-    const list = await window.api.listProjects(rootDir.value);
-    // 只列"未完成归档"的项目（v1.2.4：未显式标记 archived；旧项目无该字段视为未完成）
-    items.value = list
-      .filter((p) => p.info?.archived !== true)
-      .map((p) => ({
-        name: p.info?.name || p.name,
-        code: p.info?.code || '',
-        folder: p.folder,
-        stage: p.info?.stage,
-        region: p.info?.region,
-      }));
-  } catch {
-    items.value = [];
-  } finally {
-    loading.value = false;
-  }
+  await refresh();
+  // v1.2.7 实时刷新：主窗口新建/归档/取消归档/删除项目 → 主进程广播 → 这里重取列表
+  offChanged = window.api.onProjectsChanged(() => {
+    void refresh();
+  });
 });
 
+onBeforeUnmount(() => {
+  offChanged?.();
+});
+
+/** 点击某项目 → 主窗口打开该项目（folder 非空）。 */
+function openProject(folder: string) {
+  window.api.trayBoxShowMain(folder).catch(() => {
+    ElMessage.error('无法显示主窗口');
+  });
+}
+
+/** 点击"打开主窗口" → 主窗口回项目列表（folder 空）。 */
 function showMain() {
-  window.api.trayBoxShowMain().catch(() => {
+  window.api.trayBoxShowMain('').catch(() => {
     ElMessage.error('无法显示主窗口');
   });
 }
@@ -208,9 +226,6 @@ function onDragEnd() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.tb-item-stage {
-  flex-shrink: 0;
 }
 .tb-item-sub {
   margin-top: 2px;

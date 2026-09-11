@@ -4,7 +4,7 @@
  *   加插槽建文件夹 / 删插槽删文件夹 / 改名移文件夹；加载旧项目（扁平 files/）自动迁移到嵌套。
  * 全部基于本地 Node fs，离线可用、不依赖任何云服务。
  */
-import { ipcMain, dialog, shell, app } from 'electron';
+import { ipcMain, dialog, shell, app, BrowserWindow } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -94,6 +94,19 @@ async function migrateFlatToNested(projectRoot: string, project: Project): Promi
     }
   }
   return migrated;
+}
+
+/**
+ * 广播"项目集合/状态变化"给所有窗口（v1.2.7：悬浮框实时刷新）。
+ * 主进程在 新建/套模板建项/保存(含归档开关)/改信息/删除 项目后调用。
+ * 幂等：窗口收到后只是重新取一次列表（本地文件读取，廉价），重复广播无害。
+ */
+function notifyProjectsChanged(): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send(IPC.PROJECTS_CHANGED);
+    }
+  }
 }
 
 export function registerIpc(): void {
@@ -224,6 +237,7 @@ export function registerIpc(): void {
       await ensureDir(folder);
       await ensureSlotFolders(folder, project.slots ?? []);
       await fs.writeFile(path.join(folder, 'project.json'), JSON.stringify(stripRuntime(project), null, 2), 'utf-8');
+      notifyProjectsChanged(); // 新建 → 悬浮框"未完成归档"实时出现
       return { folder, folderName, rootPath: folder };
     },
   );
@@ -245,6 +259,7 @@ export function registerIpc(): void {
     const jsonPath = path.join(projectFolder, 'project.json');
     const data = stripRuntime(project);
     await fs.writeFile(jsonPath, JSON.stringify(data, null, 2), 'utf-8');
+    notifyProjectsChanged(); // 保存（含归档/取消归档开关）→ 悬浮框实时增删
     return { saved: jsonPath };
   });
 
@@ -266,12 +281,14 @@ export function registerIpc(): void {
       }
       data.updatedAt = new Date().toISOString();
       await fs.writeFile(jsonPath, JSON.stringify(stripRuntime(data), null, 2), 'utf-8');
+      notifyProjectsChanged(); // 改信息（可能含归档开关/分类）→ 悬浮框实时刷新
       return { saved: jsonPath, info: data.info };
     },
   );
 
   ipcMain.handle(IPC.PROJECT_DELETE, async (_e, projectFolder: string) => {
     await fs.rm(projectFolder, { recursive: true, force: true });
+    notifyProjectsChanged(); // 删除项目 → 悬浮框实时移除
     return { deleted: projectFolder };
   });
 
@@ -381,6 +398,9 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.TPL_DELETE, async (_e, id: string) => deleteTemplate(id));
   ipcMain.handle(IPC.TPL_SAVE_FROM_PROJECT, async (_e, { projectFolder, name, description }: { projectFolder: string; name?: string; description?: string }) =>
     saveTemplateFromProject(projectFolder, name, description));
-  ipcMain.handle(IPC.TPL_APPLY, async (_e, { rootDir, project, templateId }: { rootDir: string; project: Project; templateId: string }) =>
-    applyTemplateToNewProject({ rootDir, project, templateId }));
+  ipcMain.handle(IPC.TPL_APPLY, async (_e, { rootDir, project, templateId }: { rootDir: string; project: Project; templateId: string }) => {
+    const res = await applyTemplateToNewProject({ rootDir, project, templateId });
+    notifyProjectsChanged(); // 套模板建项 → 悬浮框"未完成归档"实时出现
+    return res;
+  });
 }

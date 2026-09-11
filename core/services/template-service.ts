@@ -19,6 +19,7 @@ import { sanitize } from '../paths';
 import { projectToTemplateStructure } from '../template-mapping';
 import { ensureDir } from './fs';
 import { PRESET_TEMPLATES } from '../presets';
+import { getSeededPresets, markPresetsSeeded } from './settings';
 import { stripRuntime, ensureSlotFolders } from '../project-util';
 
 /* ---------------- 工具 ---------------- */
@@ -98,23 +99,34 @@ export async function listTemplates(): Promise<StructureTemplate[]> {
 
 /**
  * 启动时种入预置模板（软件自带一套，开箱即用）。
- * 幂等：按模板名去重，已存在则跳过；用户删除后下次启动会重新种入（保证"自带模板"）。
- * @return 本次新种入的模板数量
+ * v1.2.7 一次性种入：按预置的稳定 key 记录"已种过"（存设置），重启不再重复种入——
+ *   用户删除预置模板后不会被再加回来（旧版按模板名判断、删除后重启会重新种入，已改）。
+ * 升级兼容：旧版本已按"名"种过的预置模板，这里只补记 key（不重复创建，避免同名两份）。
+ * 幂等：同一 key 只处理一次；已存在（按名）或已记录 key 的预置都只补记 key。
+ * @return 本次实际新建的模板数量
  */
 export async function seedPresetTemplates(): Promise<number> {
-  const existing = await listTemplates();
-  const existingNames = new Set(existing.map((t) => t.name));
-  let seeded = 0;
+  const existingNames = new Set((await listTemplates()).map((t) => t.name));
+  const seededKeys = new Set(await getSeededPresets());
+  let created = 0;
   for (const preset of PRESET_TEMPLATES) {
-    if (existingNames.has(preset.name)) continue;
+    if (seededKeys.has(preset.key)) continue; // 已记录过，跳过
+    if (existingNames.has(preset.name)) {
+      // 旧版本已按名种过：补记 key，不重复创建（避免同名两份）
+      seededKeys.add(preset.key);
+      continue;
+    }
     await materializeTemplate({
       name: preset.name,
       description: preset.description,
       slots: preset.structure,
     });
-    seeded++;
+    seededKeys.add(preset.key);
+    created++;
   }
-  return seeded;
+  // 记录"已种过"的所有 key（含本次新种的 + 旧版按名种过补记的），幂等
+  if (seededKeys.size) await markPresetsSeeded([...seededKeys]);
+  return created;
 }
 
 export async function getTemplate(id: string): Promise<StructureTemplate> {
