@@ -18,7 +18,7 @@ const DEV_URL = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
 let mainWindow: BrowserWindow | null = null;
 
 function createWindow(): BrowserWindow {
-  mainWindow = new BrowserWindow({
+  const win = new BrowserWindow({
     title: 'PPIMS · 个人项目信息管理系统',
     // 应用图标：可爱小人整理文件夹（public/ 下；Windows 窗口标题栏/任务栏生效）
     icon: path.join(app.getAppPath(), 'public', 'icon.png'),
@@ -26,6 +26,11 @@ function createWindow(): BrowserWindow {
     height: 820,
     minWidth: 960,
     minHeight: 640,
+    // 先隐藏窗口：等首帧渲染完成（ready-to-show）再 show（v1.2.8 修复"开机自启文字对不齐"）。
+    // 默认 show:true 会在页面仍在加载/布局时就可见；手动启动时机器空闲、首帧瞬间完成故无感，
+    // 但开机自启时机下系统字体尚未度量完成，首帧用回退字体布局 → el-table 行高/列/文本基线错位。
+    // 与 core/tray.ts 悬浮框"show:false → 加载完再显示"的做法保持一致。
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -34,25 +39,41 @@ function createWindow(): BrowserWindow {
       spellcheck: false,
     },
   });
+  mainWindow = win;
 
   // 外链一律交给系统浏览器，不在应用内打开
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
     return { action: 'deny' };
   });
 
   if (isDev && DEV_URL) {
-    void mainWindow.loadURL(DEV_URL);
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
+    void win.loadURL(DEV_URL);
+    win.webContents.openDevTools({ mode: 'detach' });
   } else {
-    void mainWindow.loadFile(path.join(DIST, 'index.html'));
+    void win.loadFile(path.join(DIST, 'index.html'));
   }
 
-  mainWindow.on('closed', () => {
-    mainWindow = null;
+  // 首帧渲染完成（字体已就绪、布局已定型）再显示窗口。
+  // 兜底：极端情况 ready-to-show 未触发（如加载异常）时，3s 后强制显示，避免窗口一直不出现。
+  let shown = false;
+  const doShow = () => {
+    if (shown || win.isDestroyed()) return;
+    shown = true;
+    if (!win.isVisible()) win.show();
+  };
+  win.once('ready-to-show', doShow);
+  const fallback = setTimeout(() => {
+    win.removeListener('ready-to-show', doShow);
+    doShow();
+  }, 3000);
+  if (typeof fallback.unref === 'function') fallback.unref();
+
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = null;
   });
 
-  return mainWindow;
+  return win;
 }
 
 // 单实例锁：避免多开导致 project.json 写冲突

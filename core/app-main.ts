@@ -79,4 +79,21 @@ for (const [name, comp] of Object.entries(icons)) {
 
 app.use(createPinia());
 app.use(ElementPlus, { locale: zhCn });
-app.mount('#app');
+
+/**
+ * 先等字体就绪再挂载（v1.2.8 修复"关机重启自动启动时 UI 文字位置对不齐"）。
+ *
+ * 根因：开机自启时机下，系统字体（Microsoft YaHei）可能尚未度量完成，
+ * 首帧布局会退到回退字体计算，其行高/升降部度量不同 → el-table 行高、列边界、
+ * 文本基线错位。手动启动时机器空闲、字体已就绪，故看不到问题。
+ * 在 document.fonts.ready 之后再 mount，可保证"首次布局"即用真实字体度量，
+ * 从根上避免错位；字体异常时该 Promise 仍会 resolve，不会卡死。
+ */
+const mount = () => app.mount('#app');
+if (typeof document !== 'undefined' && document.fonts?.ready) {
+  void Promise.resolve(document.fonts.ready)
+    .then(mount)
+    .catch(mount); // 字体加载异常也不阻塞启动
+} else {
+  mount();
+}
